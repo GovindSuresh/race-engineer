@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-barlow-condensed);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Was hardcoded to Arial, silently overriding the Geist Sans wired up in
+     layout.tsx via next/font — every page was rendering in the browser's
+     plain fallback font except the couple of spots explicitly set to
+     font-mono. Intentional now: fall through to the --font-sans theme
+     token instead of a hardcoded stack. */
+  font-family: var(--font-sans);
+}
