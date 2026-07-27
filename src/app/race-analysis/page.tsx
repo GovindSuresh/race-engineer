@@ -5,11 +5,13 @@ import {
   buildRaceSummary,
   computeRaceKpis,
   computeSmoothedPace,
+  isEventResultExport,
   listTeams,
   mergeGarage61IntoIracing,
   parseGarage61Csv,
   parseIracingJson,
   type LapRecord,
+  type RawIracingEventResultExport,
   type RawIracingExport,
   type TeamOption,
 } from "@/core";
@@ -26,6 +28,8 @@ import { TrackPositionChart } from "@/components/charts/TrackPositionChart";
 import { StintGanttChart } from "@/components/charts/StintGanttChart";
 import { GapTrendChart } from "@/components/charts/GapTrendChart";
 import { PaceVsFieldChart } from "@/components/charts/PaceVsFieldChart";
+import { FieldStrengthChart } from "@/components/charts/FieldStrengthChart";
+import { RatingVsPaceChart } from "@/components/charts/RatingVsPaceChart";
 import { FileUploadButton } from "@/components/FileUploadButton";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { formatLapTime, formatSeconds } from "@/lib/format";
@@ -39,11 +43,21 @@ export default function RaceAnalysis() {
   const [error, setError] = useState<string | null>(null);
   const [iracingFileName, setIracingFileName] = useState<string | null>(null);
   const [garage61FileName, setGarage61FileName] = useState<string | null>(null);
+  const [eventResult, setEventResult] = useState<RawIracingEventResultExport | null>(null);
+  const [eventResultFileName, setEventResultFileName] = useState<string | null>(null);
   const [hiddenDrivers, setHiddenDrivers] = useState<Set<string>>(new Set());
   const [cleanLapsOnly, setCleanLapsOnly] = useState(false);
-  // Bumped to remount the (uncontrolled) file input after clearing, so
+  // Bumped to remount the (uncontrolled) file inputs after clearing, so
   // re-selecting the same file still fires a change event.
   const [garage61ResetKey, setGarage61ResetKey] = useState(0);
+  const [eventResultResetKey, setEventResultResetKey] = useState(0);
+
+  function clearEventResult() {
+    setEventResult(null);
+    setEventResultFileName(null);
+    setError(null);
+    setEventResultResetKey((k) => k + 1);
+  }
 
   /** Reverts the optional Garage61 enrichment. No pre-merge copy of the laps is
    *  kept, so this re-derives them from the still-loaded iRacing export —
@@ -71,36 +85,69 @@ export default function RaceAnalysis() {
     }
   }
 
-  /** Handles a batch of dropped/selected files, routing each by extension.
-   *  Both files can arrive together in one drop, so the lap chart is handled
-   *  first and its freshly-parsed laps passed directly into the CSV merge —
-   *  reading `allLaps` back from state wouldn't work, React hasn't committed
-   *  that setState yet. */
+  /** Handles a batch of dropped/selected files.
+   *
+   *  Routing can't go on extension alone: the lap chart AND the event_result
+   *  are both `.json` with no filename convention, so each JSON is parsed and
+   *  identified by CONTENT via isEventResultExport(). Files can arrive together
+   *  in one drop, so the lap chart is handled first and its freshly-parsed laps
+   *  passed directly into the CSV merge — reading `allLaps` back from state
+   *  wouldn't work, React hasn't committed that setState yet. */
   const handleFiles = useCallback(
     async function handleFiles(files: File[]) {
       setError(null);
-      const jsonFile = files.find((f) => /\.json$/i.test(f.name));
-      const csvFile = files.find((f) => /\.csv$/i.test(f.name));
 
-      let baseLaps = allLaps;
-      if (jsonFile) {
+      const csvFile = files.find((f) => /\.csv$/i.test(f.name));
+      const jsonFiles = files.filter((f) => /\.json$/i.test(f.name));
+
+      let lapChart: { file: File; parsed: RawIracingExport } | undefined;
+      let eventResultFile: { file: File; parsed: RawIracingEventResultExport } | undefined;
+
+      for (const file of jsonFiles) {
+        let parsed: unknown;
         try {
-          const parsedRaw = JSON.parse(await jsonFile.text()) as RawIracingExport;
-          baseLaps = parseIracingJson(parsedRaw);
-          setRaw(parsedRaw);
-          setAllLaps(baseLaps);
-          setTeams(listTeams(parsedRaw));
-          setIracingFileName(jsonFile.name);
-          setSelectedTeamId(null);
-          setGarage61UnmatchedCount(null);
-          setGarage61FileName(null);
-          setHiddenDrivers(new Set());
+          parsed = JSON.parse(await file.text());
         } catch (err) {
           setError(
-            `Couldn't read ${jsonFile.name}: ${err instanceof Error ? err.message : String(err)}`,
+            `Couldn't read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
           );
           return;
         }
+        if (isEventResultExport(parsed)) {
+          eventResultFile = { file, parsed };
+        } else if (parsed && typeof parsed === "object" && "lapData" in parsed) {
+          lapChart = { file, parsed: parsed as RawIracingExport };
+        } else {
+          setError(
+            `${file.name} isn't a recognised iRacing export — expected a lap chart (has "lapData") or an event result (has type "event_result").`,
+          );
+          return;
+        }
+      }
+
+      let baseLaps = allLaps;
+      if (lapChart) {
+        try {
+          baseLaps = parseIracingJson(lapChart.parsed);
+        } catch (err) {
+          setError(
+            `Couldn't parse ${lapChart.file.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return;
+        }
+        setRaw(lapChart.parsed);
+        setAllLaps(baseLaps);
+        setTeams(listTeams(lapChart.parsed));
+        setIracingFileName(lapChart.file.name);
+        setSelectedTeamId(null);
+        setGarage61UnmatchedCount(null);
+        setGarage61FileName(null);
+        setHiddenDrivers(new Set());
+      }
+
+      if (eventResultFile) {
+        setEventResult(eventResultFile.parsed);
+        setEventResultFileName(eventResultFile.file.name);
       }
 
       if (csvFile) {
@@ -111,7 +158,7 @@ export default function RaceAnalysis() {
         mergeGarage61(await csvFile.text(), csvFile.name, baseLaps);
       }
 
-      if (!jsonFile && !csvFile) {
+      if (!csvFile && jsonFiles.length === 0) {
         setError("Unrecognised file type — expected an iRacing .json export or a Garage61 .csv.");
       }
     },
@@ -131,14 +178,25 @@ export default function RaceAnalysis() {
   const { raceSummary, summaryError } = useMemo(() => {
     if (!raw || selectedTeamId === null) return { raceSummary: null, summaryError: null };
     try {
-      return { raceSummary: buildRaceSummary(raw, allLaps, selectedTeamId), summaryError: null };
+      return {
+        raceSummary: buildRaceSummary(raw, allLaps, selectedTeamId, eventResult ?? undefined),
+        summaryError: null,
+      };
     } catch (err) {
       return {
         raceSummary: null,
         summaryError: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [raw, allLaps, selectedTeamId]);
+  }, [raw, allLaps, selectedTeamId, eventResult]);
+
+  /** True when the event_result describes a DIFFERENT subsession than the lap
+   *  chart — the ratings would then belong to another race entirely. Warned
+   *  rather than blocked, so a genuine iRacing inconsistency doesn't lock the
+   *  dashboard, but it must be visible: silently mixing two races' data would
+   *  be worse than either failing or nagging. */
+  const subsessionMismatch =
+    raw !== null && eventResult !== null && raw.subsession_id !== eventResult.data.subsession_id;
 
   /** Fixed driver order for the whole page — colors are assigned from this
    *  index and must never be reassigned when the filter hides someone. */
@@ -189,6 +247,24 @@ export default function RaceAnalysis() {
         tone: "good",
       },
       { label: "Incidents", value: String(kpis.totalIncidents) },
+      // Only present with the event_result upload — iRacing's own published SoF,
+      // passed through rather than recomputed (see EventMeta).
+      ...(raceSummary.eventMeta
+        ? [
+            {
+              label: "Strength of field",
+              value: String(
+                raceSummary.eventMeta.classStrengthOfField ??
+                  raceSummary.eventMeta.strengthOfField,
+              ),
+              sublabel:
+                raceSummary.eventMeta.splitRank !== undefined
+                  ? `split ${raceSummary.eventMeta.splitRank} of ${raceSummary.eventMeta.splitCount}`
+                  : `${raceSummary.eventMeta.numDrivers} drivers`,
+              tone: "hero" as const,
+            },
+          ]
+        : []),
       {
         label: "Pit stops",
         value: kpis.pitStopCount !== undefined ? String(kpis.pitStopCount) : "n/a",
@@ -334,6 +410,12 @@ export default function RaceAnalysis() {
       requirement: "Optional · .csv",
       fileName: garage61FileName,
     },
+    {
+      key: "event",
+      label: "iRacing event result",
+      requirement: "Optional · .json",
+      fileName: eventResultFileName,
+    },
   ];
 
   if (!raw) {
@@ -343,7 +425,7 @@ export default function RaceAnalysis() {
         <DropStage
           flag="/// Session data required"
           heading="Drop your race data"
-          blurb="Drag both files anywhere onto this page. The iRacing lap chart is the backbone; the Garage 61 export adds fuel, weather and sector data on top of it."
+          blurb="Drag the files anywhere onto this page. The iRacing lap chart is the backbone; the Garage 61 export adds fuel, weather and sectors, and the iRacing event result adds driver ratings and Strength of Field."
           slots={dropSlots}
           accept=".json,.csv"
           onFiles={handleFiles}
@@ -432,11 +514,36 @@ export default function RaceAnalysis() {
             buttonLabel={garage61FileName ? "Replace" : "Add CSV"}
           />
 
+          <FileUploadButton
+            label="Event result"
+            accept=".json"
+            fileName={eventResultFileName}
+            onFileSelected={(file) => handleFiles([file])}
+            onClear={clearEventResult}
+            resetKey={eventResultResetKey}
+            buttonLabel={eventResultFileName ? "Replace" : "Add JSON"}
+          />
+
           <div className="flex-1" />
           <span className="text-[11px] text-faint">
             {isDragging ? "Drop to load…" : "Or drop a file anywhere on this page."}
           </span>
         </div>
+
+        {subsessionMismatch && (
+          <div className="mt-3 rounded border border-line2 border-l-[3px] border-l-danger bg-panel px-4 py-3">
+            <span className="font-display text-sm uppercase tracking-[0.08em] text-danger">
+              Different race
+            </span>
+            <p className="mt-1 text-[13px] text-muted">
+              The event result is for subsession{" "}
+              <span className="font-mono">{eventResult?.data.subsession_id}</span> but the lap chart
+              is subsession <span className="font-mono">{raw?.subsession_id}</span>. Ratings and
+              Strength of Field below therefore describe a different race than the laps — clear it,
+              or treat that data as unreliable.
+            </p>
+          </div>
+        )}
 
         {garage61UnmatchedCount !== null && garage61UnmatchedCount > 0 && (
           <div className="mt-3 rounded border border-line2 border-l-[3px] border-l-amber bg-panel px-4 py-3">
@@ -463,7 +570,21 @@ export default function RaceAnalysis() {
               <SectionHeading
                 eyebrow="/// Result"
                 title={raceSummary.ourTeam.teamName}
-                tagline={`P${raceSummary.ourTeam.finishPosition + 1} overall · ${raceSummary.ourTeam.carClassName} · ${raceSummary.ourTeam.carName}`}
+                tagline={[
+                  `P${raceSummary.ourTeam.finishPosition + 1} overall`,
+                  raceSummary.ourTeam.carClassName,
+                  raceSummary.ourTeam.carName,
+                  // Only available with the event_result upload — the lap chart
+                  // carries no track name.
+                  raceSummary.eventMeta &&
+                    `${raceSummary.eventMeta.trackName}${
+                      raceSummary.eventMeta.trackConfig
+                        ? ` (${raceSummary.eventMeta.trackConfig})`
+                        : ""
+                    }`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               />
               <div className="mt-4">
                 <KpiStrip items={kpiItems} />
@@ -491,6 +612,12 @@ export default function RaceAnalysis() {
                     <thead>
                       <tr>
                         <Th align="left">Driver</Th>
+                        {raceSummary.driverRatings && (
+                          <>
+                            <Th align="left">Licence</Th>
+                            <Th>iRating</Th>
+                          </>
+                        )}
                         <Th>Laps</Th>
                         <Th>Best</Th>
                         <Th>Avg</Th>
@@ -502,7 +629,12 @@ export default function RaceAnalysis() {
                       </tr>
                     </thead>
                     <tbody>
-                      {raceSummary.ourTeam.drivers.map((d) => (
+                      {raceSummary.ourTeam.drivers.map((d) => {
+                        const rating =
+                          d.custId !== undefined
+                            ? raceSummary.driverRatings?.get(d.custId)
+                            : undefined;
+                        return (
                         <Tr key={d.driverName}>
                           <Td align="left" className={hiddenDrivers.has(d.driverName) ? "text-faint" : ""}>
                             <Swatch color={colorFor(d.driverName)} />
@@ -513,6 +645,30 @@ export default function RaceAnalysis() {
                               </span>
                             )}
                           </Td>
+                          {raceSummary.driverRatings && (
+                            <>
+                              <Td align="left" className="text-muted">
+                                {rating?.license ?? "–"}
+                              </Td>
+                              <Td>
+                                {rating?.iRatingBefore ?? "–"}
+                                {rating?.iRatingChange !== undefined && (
+                                  <span
+                                    className={
+                                      rating.iRatingChange > 0
+                                        ? "ml-1.5 text-pgreen"
+                                        : rating.iRatingChange < 0
+                                          ? "ml-1.5 text-danger"
+                                          : "ml-1.5 text-faint"
+                                    }
+                                  >
+                                    {rating.iRatingChange > 0 ? "+" : ""}
+                                    {rating.iRatingChange}
+                                  </span>
+                                )}
+                              </Td>
+                            </>
+                          )}
                           <Td>{d.lapsCompleted}</Td>
                           <Td className={d.bestLapTimeMs === bestLapMs ? "text-purple font-semibold" : ""}>
                             {formatLapTime(d.bestLapTimeMs)}
@@ -528,7 +684,8 @@ export default function RaceAnalysis() {
                             {d.stints.length > 0 ? d.stints.length : "n/a"}
                           </Td>
                         </Tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </Table>
                 </TableWrap>
@@ -667,11 +824,74 @@ export default function RaceAnalysis() {
               <Panel className="mt-3.5">
                 <PaceVsFieldChart data={paceVsFieldChartData} maxLap={maxLap} />
               </Panel>
+
+              {raceSummary.fieldStrength && raceSummary.fieldStrength.length > 0 && (
+                <Panel className="mt-4">
+                  <PanelHeading
+                    title="Who you were racing"
+                    hint="Average iRating of the drivers actually on track, lap by lap — the same set of cars the delta above is measured against."
+                  />
+                  <FieldStrengthChart
+                    data={raceSummary.fieldStrength}
+                    publishedStrengthOfField={raceSummary.eventMeta?.strengthOfField}
+                    maxLap={maxLap}
+                  />
+                  <p className="mt-3 max-w-[104ch] text-[11px] leading-relaxed text-faint">
+                    This is our own plain mean of the iRatings on track, not iRacing&apos;s Strength
+                    of Field — iRacing appears to compute SoF at registration, and we can&apos;t
+                    reproduce their published figure from the results file, so the dashed line shows
+                    their number for reference rather than as something we derived. It moves for two
+                    real reasons: cars retire, and in a team race the driver in each car swaps. One
+                    caveat to read it with — late in a long race only cars on the leaders&apos; lap
+                    count have recorded that lap, so the right-hand end over-represents the faster
+                    cars.
+                  </p>
+                </Panel>
+              )}
             </section>
+
+            {raceSummary.ratingVsPace && raceSummary.ratingVsPace.length > 0 && (
+              <section className="mt-11">
+                <SectionHeading
+                  eyebrow="06 · Ratings"
+                  title="Pace against rating"
+                  tagline="who punched above their weight"
+                  note={
+                    <>
+                      One dot per driver in the class: how highly rated they were entering the race,
+                      against how their pace actually came out. The y value is their{" "}
+                      <b className="text-muted">median lap delta to the field median</b>, so it
+                      already cancels out track evolution and time of day — a driver who only ran at
+                      3am is measured against what the field did at 3am. The dashed line is what a
+                      driver&apos;s rating predicted;{" "}
+                      <span className="text-pgreen">above it is over-performing</span>. Quicker is
+                      up, matching every other pace view here.
+                      {raceSummary.ratingPaceTrend && (
+                        <>
+                          {" "}
+                          In this race the field trend was{" "}
+                          <b className="text-muted">
+                            {(raceSummary.ratingPaceTrend.msPerIRatingPoint * 1000).toFixed(2)}s per
+                            1000 iRating
+                          </b>
+                          .
+                        </>
+                      )}
+                    </>
+                  }
+                />
+                <Panel className="mt-3.5">
+                  <RatingVsPaceChart
+                    points={raceSummary.ratingVsPace}
+                    trend={raceSummary.ratingPaceTrend}
+                  />
+                </Panel>
+              </section>
+            )}
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="06 · Gap"
+                eyebrow="07 · Gap"
                 title="Gap to leader"
                 tagline="the raw scoreboard view"
                 note="From iRacing's own per-lap interval. Breaks in the line are laps where we were a full lap down and iRacing reported a lap count instead of a time — the two aren't the same unit, so they aren't joined up."
@@ -683,7 +903,7 @@ export default function RaceAnalysis() {
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="07 · Field"
+                eyebrow="08 · Field"
                 title="Field standings"
                 tagline="the whole entry list"
                 note="Fuel, stint and pace-trend data only ever exists for your own team via the optional Garage61 upload — the iRacing export carries no fuel or pit signal for anyone else, so those columns are deliberately absent here rather than blank."
