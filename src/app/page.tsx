@@ -1,40 +1,56 @@
 import Link from "next/link";
-import { SectionHeading } from "@/components/SectionHeading";
+
+const ENTRY_POINTS = [
+  {
+    href: "/stint-planner",
+    index: "01",
+    title: "Stint Planner",
+    tagline: "before the race",
+    body: "Compare up to four Garage61 practice exports side by side — pace, fuel burn, stint length, and whether a different fuel strategy actually paid off.",
+  },
+  {
+    href: "/race-analysis",
+    index: "02",
+    title: "Race Analysis",
+    tagline: "after the race",
+    body: "Drop in an iRacing lap chart for full-field pace, track position, stint timelines, and how your pace read against the field at every point of the race.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
-      <div className="flex flex-col items-center gap-1">
-        <span className="font-mono text-xs uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
-          Chaps Motorsport
-        </span>
-        <SectionHeading as="h1" title="Race Engineer" />
-      </div>
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <Link
-          href="/stint-planner"
-          className="flex w-64 flex-col gap-1 rounded-lg border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-600"
-        >
-          <span className="font-display text-lg font-semibold uppercase tracking-wide">
-            Stint Planner
-          </span>
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            Upload a Garage61 practice export to see pace, fuel, and stint
-            data.
-          </span>
-        </Link>
-        <Link
-          href="/race-analysis"
-          className="flex w-64 flex-col gap-1 rounded-lg border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-600"
-        >
-          <span className="font-display text-lg font-semibold uppercase tracking-wide">
-            Race Analysis
-          </span>
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            Upload an iRacing race export for full-field pace, gap trends,
-            and driver report cards.
-          </span>
-        </Link>
+    <div className="flex min-h-screen flex-col items-center justify-center px-5 py-16">
+      <div className="w-full max-w-[860px]">
+        <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.3em] text-amber">
+          {"/// Chaps Motorsport"}
+        </div>
+        <h1 className="font-display text-[clamp(44px,9vw,76px)] font-bold uppercase leading-[0.92] tracking-[0.02em] text-text">
+          Race
+          <br />
+          Engineer
+        </h1>
+        <p className="mt-5 max-w-[56ch] text-muted">
+          A pit-wall tool for iRacing endurance teams. Upload a session, get the pace, fuel and
+          strategy picture back. Everything is processed in your browser — nothing is uploaded.
+        </p>
+
+        <div className="mt-11 grid gap-3 sm:grid-cols-2">
+          {ENTRY_POINTS.map((entry) => (
+            <Link
+              key={entry.href}
+              href={entry.href}
+              className="group flex flex-col rounded-md border border-line bg-panel p-6 transition-colors hover:border-amber hover:bg-panel2"
+            >
+              <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.28em] text-faint transition-colors group-hover:text-amber">
+                {entry.index} · {entry.tagline}
+              </div>
+              <span className="font-display text-[26px] font-bold uppercase leading-none tracking-[0.03em] text-text">
+                {entry.title}
+              </span>
+              <span className="mt-2.5 text-[13px] leading-relaxed text-muted">{entry.body}</span>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

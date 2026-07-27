@@ -1,32 +1,89 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Design tokens — ported from the ref_data/chaps_spa24_dashboard.html
+   prototype's "pit wall" design system.
+
+   This app is deliberately DARK-ONLY. The look depends on layered near-black
+   surfaces with an amber accent; a light variant would read as a different
+   product, so there is no `prefers-color-scheme: light` branch anywhere and
+   components should not carry `dark:` variants. `color-scheme: dark` below
+   also makes native controls (file pickers, selects, scrollbars) render dark
+   instead of light-on-dark.
+   --------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  /* Surfaces, in ascending elevation: page -> panel -> raised row/control */
+  --bg: #101319;
+  --panel: #171c24;
+  --panel2: #1d232d;
+  /* Two border weights: --line for internal rules (table rows), --line2 for
+     the outer edge of controls/panels, which needs to read slightly stronger */
+  --line: #28303c;
+  --line2: #333d4b;
+
+  /* Text, in descending prominence */
+  --text: #e9ecf1;
+  --muted: #8c95a4;
+  --faint: #5b6474;
+
+  /* Semantic accents. Amber is the brand accent (eyebrows, brand, warnings);
+     purple marks a session/field best; green a personal best or a gain;
+     danger a loss. These are reserved roles — never reused as a series color. */
+  --amber: #ffb224;
+  --purple: #b96cff;
+  --pgreen: #33d69f;
+  --wet: #45b8e8;
+  --danger: #ff5c5c;
+  --night: rgba(103, 110, 241, 0.1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-barlow-condensed);
-}
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-amber: var(--amber);
+  --color-purple: var(--purple);
+  --color-pgreen: var(--pgreen);
+  --color-wet: var(--wet);
+  --color-danger: var(--danger);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Three fonts with strict roles, matching the prototype:
+       --font-display  Barlow Condensed — headings/labels/table headers, always
+                       uppercase + letter-spaced (the timing-screen look)
+       --font-mono     IBM Plex Mono — every NUMBER, so digits align in tables
+       --font-sans     Inter — prose only (subtitles, explanatory notes) */
+  --font-display: var(--font-barlow-condensed);
+  --font-mono: var(--font-plex-mono);
+  --font-sans: var(--font-inter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  /* Was hardcoded to Arial, silently overriding the Geist Sans wired up in
-     layout.tsx via next/font — every page was rendering in the browser's
-     plain fallback font except the couple of spots explicitly set to
-     font-mono. Intentional now: fall through to the --font-sans theme
-     token instead of a hardcoded stack. */
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* A single visible focus ring for every interactive element, in the "wet"
+   blue so it never collides with the amber accent or a series color. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--wet);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
 }

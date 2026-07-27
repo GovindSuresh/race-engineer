@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { CHART_ANNOTATION, CHART_AXIS, CHART_GRIDLINE, CHART_TEXT_MUTED, seriesColor } from "./chart-theme";
+import { useMemo } from "react";
+import type { EChartsOption } from "echarts";
+import { EChart } from "./EChart";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapAxis, seriesColor, verticalBands } from "./chart-theme";
 
 export interface PaceVsFieldChartProps {
   /** One row per lap we completed. `deltaSeconds` is null both when the
@@ -20,68 +13,83 @@ export interface PaceVsFieldChartProps {
    *  reasons that have nothing to do with race pace, so it's excluded from
    *  the line entirely rather than plotted as a misleading spike that also
    *  wrecks the y-axis scale for every other lap. `pitAffected` still marks
-   *  where it happened, as a vertical band rather than a line point. */
+   *  where it happened, as a shaded band rather than a line point. */
   data: Array<{ lapNumber: number; deltaSeconds: number | null; pitAffected: boolean }>;
+  /** Last lap to show, so the axis ends at the real race/session distance
+   *  instead of ECharts rounding up to a "nice" number and leaving dead
+   *  space to the right. */
+  maxLap: number;
 }
 
-export function PaceVsFieldChart({ data }: PaceVsFieldChartProps) {
-  const pitLapNumbers = data.filter((d) => d.pitAffected).map((d) => d.lapNumber);
+export function PaceVsFieldChart({ data, maxLap }: PaceVsFieldChartProps) {
+  const option = useMemo<EChartsOption>(() => {
+    const pitLaps = data.filter((d) => d.pitAffected).map((d) => d.lapNumber);
+    // One shaded band per pit-affected lap, drawn as a one-lap-wide column so
+    // it reads as "this lap", not "from here on". Amber = the reserved
+    // "flagged / excluded, not a data point" role.
+    const pitBands = verticalBands(pitLaps, "rgba(255,178,36,.14)");
+
+    return {
+      grid: { left: 62, right: 20, top: 14, bottom: GRID_BOTTOM_WITH_ZOOM },
+      tooltip: {
+        ...TOOLTIP,
+        trigger: "axis",
+        axisPointer: { type: "line", lineStyle: { color: C.line2 } },
+        formatter: (params) => {
+          const rows = axisRows(params);
+          const lap = Number(rows[0]?.axisValue);
+          const point = data.find((d) => d.lapNumber === lap);
+          if (point?.pitAffected) {
+            return `Lap ${lap}<br/><span style="color:${C.amber}">pit in/out lap — excluded from the pace line</span>`;
+          }
+          const v = point?.deltaSeconds;
+          if (v == null) {
+            return `Lap ${lap}<br/><span style="color:${C.faint}">no field data this lap</span>`;
+          }
+          const color = v < 0 ? C.pgreen : C.danger;
+          return `Lap ${lap}<br/><b style="color:${color}">${v > 0 ? "+" : ""}${v.toFixed(2)}s</b> vs field median`;
+        },
+      },
+      xAxis: lapAxis(maxLap),
+      yAxis: {
+        type: "value",
+        scale: true,
+        ...AXIS,
+        axisLabel: {
+          ...AXIS.axisLabel,
+          formatter: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`,
+        },
+      },
+      dataZoom: dataZoom(),
+      series: [
+        {
+          name: "Delta to field",
+          type: "line" as const,
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: seriesColor(0), width: 1.8 },
+          itemStyle: { color: seriesColor(0) },
+          data: data.map((d) => [d.lapNumber, d.deltaSeconds] as [number, number | null]),
+          // Zero is the field's own pace, so it's the line that actually
+          // matters on this chart — brighter than a normal gridline.
+          markLine: {
+            silent: true,
+            symbol: "none",
+            label: { show: false },
+            lineStyle: { color: C.muted, width: 1 },
+            data: [{ yAxis: 0 }],
+          },
+          markArea: { silent: true, data: pitBands },
+        },
+      ],
+    };
+  }, [data, maxLap]);
 
   return (
-    <div className="chart-root h-64 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-          <CartesianGrid stroke={CHART_GRIDLINE} strokeDasharray="0" vertical={false} />
-          <XAxis
-            dataKey="lapNumber"
-            type="number"
-            stroke={CHART_AXIS}
-            tick={{ fill: CHART_TEXT_MUTED, fontSize: 12 }}
-            label={{ value: "Lap", position: "insideBottom", offset: -4, fill: CHART_TEXT_MUTED }}
-          />
-          <YAxis
-            stroke={CHART_AXIS}
-            tick={{ fill: CHART_TEXT_MUTED, fontSize: 12 }}
-            label={{
-              value: "Delta to field median (s)",
-              angle: -90,
-              position: "insideLeft",
-              fill: CHART_TEXT_MUTED,
-            }}
-          />
-          <ReferenceLine y={0} stroke={CHART_AXIS} />
-          {pitLapNumbers.map((lapNumber) => (
-            <ReferenceLine
-              key={lapNumber}
-              x={lapNumber}
-              stroke={CHART_ANNOTATION}
-              strokeDasharray="3 3"
-              strokeOpacity={0.6}
-            />
-          ))}
-          <Tooltip
-            formatter={(value, _name, entry) => {
-              const pitAffected = (entry?.payload as { pitAffected?: boolean } | undefined)
-                ?.pitAffected;
-              if (pitAffected) return "pit in/out lap — excluded from the pace line";
-              return value === null || value === undefined
-                ? "no field data this lap"
-                : `${Number(value) > 0 ? "+" : ""}${Number(value).toFixed(2)}s`;
-            }}
-            labelFormatter={(lap) => `Lap ${lap}`}
-          />
-          <Line
-            type="monotone"
-            dataKey="deltaSeconds"
-            name="Delta to field"
-            stroke={seriesColor(0)}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <EChart
+      option={option}
+      height={280}
+      ariaLabel="Our lap times relative to the field's median pace, lap by lap"
+    />
   );
 }

@@ -1,20 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Barlow_Condensed } from "next/font/google";
+import { Inter, IBM_Plex_Mono, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Three fonts, three strict roles — see the note in globals.css's @theme block.
+// Matching the prototype exactly: Barlow Condensed / IBM Plex Mono / Inter.
+
+/** Prose only — subtitles and explanatory notes. */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+/** Every number. A true monospace so digits column-align down a table, which
+ *  matters constantly here: lap times, deltas, fuel, positions. */
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
-// Condensed, uppercase-friendly display font for section headings/labels —
-// the "timing screen" look, distinct from the body/data fonts so headers
-// read as structure, not just bigger body text.
+/** Condensed, uppercase-friendly display font for headings/labels/table
+ *  headers — the "timing screen" look, distinct from the body/data fonts so
+ *  headers read as structure, not just bigger body text. */
 const barlowCondensed = Barlow_Condensed({
   variable: "--font-barlow-condensed",
   subsets: ["latin"],
@@ -34,9 +41,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${barlowCondensed.variable} h-full antialiased`}
+      className={`${inter.variable} ${plexMono.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }
