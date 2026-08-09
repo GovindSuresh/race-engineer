@@ -551,7 +551,7 @@ export default function RaceAnalysis() {
               Partial merge
             </span>
             <p className="mt-1 text-[13px] text-muted">
-              {garage61UnmatchedCount} Garage61 row(s) couldn&apos;t be matched to a driver in the
+              {garage61UnmatchedCount} Garage61 row(s) couldn’t be matched to a driver in the
               iRacing export — most likely a Garage61 nickname that differs from the iRacing name.
               That data was skipped rather than misattributed.
             </p>
@@ -598,11 +598,11 @@ export default function RaceAnalysis() {
                 tagline="pace and consistency in the car"
                 note={
                   <>
-                    <b className="text-muted">σ</b> is the standard deviation of a driver&apos;s lap
+                    <b className="text-muted">σ</b> is the standard deviation of a driver’s lap
                     times — the consistency measure; lower is steadier.{" "}
                     <b className="text-muted">Top 10%</b> averages only their fastest tenth of laps,
                     which strips out traffic and pit cycles to show raw potential.{" "}
-                    <span className="text-purple">Purple</span> marks the team&apos;s best lap.
+                    <span className="text-purple">Purple</span> marks the team’s best lap.
                   </>
                 }
               />
@@ -691,7 +691,7 @@ export default function RaceAnalysis() {
                 </TableWrap>
                 {raceSummary.ourTeam.drivers.some((d) => d.stints.length === 0) && (
                   <p className="mt-3 text-[11px] text-faint">
-                    &quot;n/a&quot; stints means no Garage61 data matched that driver&apos;s laps —
+                    “n/a” stints means no Garage61 data matched that driver’s laps —
                     the iRacing export alone carries no fuel or pit signal.
                   </p>
                 )}
@@ -709,7 +709,7 @@ export default function RaceAnalysis() {
                     <b className="text-muted">Our pace</b> is a rolling median over ±5 laps — the
                     trend through the noise. The <b className="text-muted">field median</b> is the
                     reference that makes it readable: a rise our line shows{" "}
-                    <i>and the field&apos;s line shows too</i> is the track or the weather, not us.
+                    <i>and the field’s line shows too</i> is the track or the weather, not us.
                     Hollow <span className="text-amber">amber diamonds</span> are pit laps, excluded
                     from the trend. Drag below the chart to zoom.
                   </>
@@ -811,13 +811,13 @@ export default function RaceAnalysis() {
                 tagline="quick relative to what?"
                 note={
                   <>
-                    Each lap read against the field&apos;s own median clean lap at that same lap
+                    Each lap read against the field’s own median clean lap at that same lap
                     number — same car class, pit and incident laps excluded, smoothed over a few
                     laps. <span className="text-pgreen">Below zero</span> means we were quicker than
                     the field right then, not quicker than some fixed target, so an early-race lap is
                     fairly comparable to a 3am one. Our own pit laps are excluded from the line and
                     shown as <span className="text-amber">amber bands</span> — a pit stop being slow
-                    isn&apos;t a pace signal, and leaving it in swamps the scale.
+                    isn’t a pace signal, and leaving it in swamps the scale.
                   </>
                 }
               />
@@ -837,12 +837,12 @@ export default function RaceAnalysis() {
                     maxLap={maxLap}
                   />
                   <p className="mt-3 max-w-[104ch] text-[11px] leading-relaxed text-faint">
-                    This is our own plain mean of the iRatings on track, not iRacing&apos;s Strength
-                    of Field — iRacing appears to compute SoF at registration, and we can&apos;t
+                    This is our own plain mean of the iRatings on track, not iRacing’s Strength
+                    of Field — iRacing appears to compute SoF at registration, and we can’t
                     reproduce their published figure from the results file, so the dashed line shows
                     their number for reference rather than as something we derived. It moves for two
                     real reasons: cars retire, and in a team race the driver in each car swaps. One
-                    caveat to read it with — late in a long race only cars on the leaders&apos; lap
+                    caveat to read it with — late in a long race only cars on the leaders’ lap
                     count have recorded that lap, so the right-hand end over-represents the faster
                     cars.
                   </p>
@@ -863,7 +863,7 @@ export default function RaceAnalysis() {
                       <b className="text-muted">median lap delta to the field median</b>, so it
                       already cancels out track evolution and time of day — a driver who only ran at
                       3am is measured against what the field did at 3am. The dashed line is what a
-                      driver&apos;s rating predicted;{" "}
+                      driver’s rating predicted;{" "}
                       <span className="text-pgreen">above it is over-performing</span>. Quicker is
                       up, matching every other pace view here.
                       {raceSummary.ratingPaceTrend && (
