@@ -119,6 +119,115 @@ export interface RawIracingExport {
 }
 
 // ----------------------------------------------------------------------------
+// 1a-ii. SOURCE TYPES — raw iRacing "event_result" export
+//
+// A THIRD, separate iRacing file: a session summary with NO lap data. It's the
+// only source of per-driver iRating/licence and of iRacing's own published
+// Strength of Field, plus track and car names.
+//
+// Both this and the lap-chart export above are `.json`, and neither carries a
+// filename convention, so callers must tell them apart by CONTENT — this one
+// has a top-level `type: "event_result"`, the lap chart has `lapData`. See
+// `isEventResultExport()` in the parser.
+// ----------------------------------------------------------------------------
+
+/** Per-driver entry, nested under each team's `driver_results`.
+ *
+ *  IMPORTANT: in a team event the rating fields are only meaningful HERE, at
+ *  driver level. Confirmed against real data: every TEAM-level entry reports
+ *  `newi_rating: -1` / `new_license_level: -1`, because a team doesn't have a
+ *  rating — its drivers do. Drivers who registered but recorded nothing also
+ *  come through as -1 (18 of 228 in the Spa sample), so every consumer must
+ *  treat non-positive values as "unknown", never as a real rating. */
+export interface RawIracingEventDriverResult {
+  team_id: number;
+  cust_id: number;
+  display_name: string;
+  laps_complete: number;
+  incidents: number;
+  // iRating before/after this race; the delta earned is (new - old).
+  oldi_rating: number;
+  newi_rating: number;
+  // Licence class, int-encoded in blocks of four: 1-4 Rookie, 5-8 D, 9-12 C,
+  // 13-16 B, 17-20 A, 21+ Pro. Confirmed against this export's own
+  // `allowed_licenses`, which labels level 8 "Class D".
+  old_license_level: number;
+  new_license_level: number;
+  // Safety Rating within the class, ×100 (499 = "4.99").
+  old_sub_level: number;
+  new_sub_level: number;
+}
+
+/** One classified team in a simsession's `results`. Rating fields exist on this
+ *  shape in the raw file but are always -1 for team events — see the note on
+ *  RawIracingEventDriverResult. */
+export interface RawIracingEventTeamResult {
+  team_id: number;
+  display_name: string;
+  car_id: number;
+  car_name: string;
+  car_class_id: number;
+  car_class_name: string;
+  finish_position: number;
+  finish_position_in_class: number;
+  laps_complete: number;
+  incidents: number;
+  reason_out: string;
+  driver_results: RawIracingEventDriverResult[];
+}
+
+/** One simsession within the event — practice, qualifying, or the race. */
+export interface RawIracingEventSimsession {
+  simsession_number: number;
+  simsession_type_name: string; // e.g. "Race", "Lone Qualifying", "Open Practice"
+  results: RawIracingEventTeamResult[];
+}
+
+export interface RawIracingEventCarClass {
+  car_class_id: number;
+  name: string;
+  short_name: string;
+  strength_of_field: number;
+  num_entries: number;
+}
+
+/** One split of the same event. iRacing divides a large entry list into splits
+ *  by rating, so a split's rank among these is real context: the same lap time
+ *  means more in split 1 of 8 than in split 8. */
+export interface RawIracingEventSplit {
+  subsession_id: number;
+  event_strength_of_field: number;
+}
+
+export interface RawIracingEventTrack {
+  track_id: number;
+  track_name: string;
+  config_name: string;
+}
+
+export interface RawIracingEventResultData {
+  subsession_id: number;
+  series_name: string;
+  season_name: string;
+  event_strength_of_field: number;
+  event_laps_complete: number;
+  num_drivers: number;
+  num_lead_changes: number;
+  num_cautions: number;
+  start_time: string;
+  end_time: string;
+  track: RawIracingEventTrack;
+  car_classes: RawIracingEventCarClass[];
+  session_splits: RawIracingEventSplit[];
+  session_results: RawIracingEventSimsession[];
+}
+
+export interface RawIracingEventResultExport {
+  type: string; // "event_result"
+  data: RawIracingEventResultData;
+}
+
+// ----------------------------------------------------------------------------
 // 1b. SOURCE TYPES — raw Garage61 CSV (one row per parsed CSV line)
 // ----------------------------------------------------------------------------
 
@@ -344,6 +453,143 @@ export interface RaceSummary {
   // Net position change per pit-to-pit segment — see PositionStint.
   positionStints: PositionStint[];
   weatherTimeline: Array<{ lapNumber: number; weather: WeatherSnapshot }>;
+
+  // ---- From the optional event_result upload -------------------------------
+  // All undefined together when that file wasn't provided, so the dashboard
+  // degrades to the two-file flow rather than rendering zeros. Check
+  // `eventMeta` to know whether any of this is available.
+  eventMeta?: EventMeta;
+  /** Rating context per driver, keyed by cust_id. */
+  driverRatings?: Map<number, DriverRating>;
+  fieldStrength?: FieldStrengthPoint[];
+  ratingVsPace?: RatingVsPacePoint[];
+  /** Least-squares fit through ratingVsPace — the line a driver is read
+   *  against to judge over/under-performance. Undefined when there are too
+   *  few drivers to fit one. */
+  ratingPaceTrend?: { msPerIRatingPoint: number; interceptMs: number };
+}
+
+/** Rating context for one driver, from the optional event_result upload.
+ *  Absent fields mean iRacing reported no rating for them (a registered driver
+ *  who recorded nothing) — never treat a missing rating as zero. */
+export interface DriverRating {
+  custId: number;
+  driverName: string;
+  teamId: number;
+  /** iRating entering the race — the right number for "was their pace good for
+   *  their rating", since the post-race value already reflects this result. */
+  iRatingBefore?: number;
+  iRatingAfter?: number;
+  /** after - before. Positive means they gained rating this race. */
+  iRatingChange?: number;
+  /** Decoded licence, e.g. "A 4.99". */
+  license?: string;
+  safetyRating?: number;
+}
+
+/** Event-level context from the event_result upload — the "what was this race"
+ *  header data, none of which the lap-chart export carries.
+ *
+ *  `strengthOfField` values are iRacing's OWN published numbers, passed through
+ *  untouched. Deliberately not recomputed: iRacing appears to calculate SoF at
+ *  registration (our best reconstruction from the final results lands ~2810 vs
+ *  their published 2727 for the Spa sample, most likely because entries absent
+ *  from the results are still counted). Anything we derive ourselves is named
+ *  separately — see FieldStrengthPoint. */
+export interface EventMeta {
+  subsessionId: number;
+  seriesName: string;
+  seasonName: string;
+  trackName: string;
+  /** e.g. "Endurance". Empty when the track has a single layout. */
+  trackConfig: string;
+  /** iRacing's published SoF for this split. */
+  strengthOfField: number;
+  /** SoF for our own car class, when the event is multi-class. */
+  classStrengthOfField?: number;
+  classEntries?: number;
+  /** 1-based rank of this split among all splits of the event, strongest
+   *  first, with the total — "split 2 of 8". */
+  splitRank?: number;
+  splitCount?: number;
+  numDrivers: number;
+  numLeadChanges: number;
+  lapsComplete: number;
+  startTime: string;
+}
+
+/** Average iRating of the drivers actually circulating at one lap number.
+ *
+ *  Deliberately NOT called Strength of Field: it is our own metric, a plain
+ *  mean, and does not reproduce iRacing's published SoF (see EventMeta).
+ *
+ *  Why it's worth having: over a 24h race the field you're being measured
+ *  against genuinely changes — cars retire, and in a team event the driver in
+ *  each car swaps. Because the population here is "drivers who recorded lap N",
+ *  it is the SAME population the field-median lap time (and therefore our delta
+ *  to it) is computed from, so it describes the comparison set rather than
+ *  being an unrelated stat bolted alongside.
+ *
+ *  Caveat, surfaced in the UI: at high lap numbers only cars on the leaders'
+ *  lap count have recorded that lap, so late values over-represent the faster
+ *  cars. `sampleSize` is carried so thin points can be dropped or flagged. */
+export interface FieldStrengthPoint {
+  lapNumber: number;
+  averageIRating: number;
+  /** Drivers on track at this lap who had a known rating. */
+  sampleSize: number;
+  /** Drivers on track at this lap in total, rated or not. */
+  driversOnTrack: number;
+}
+
+/** One driver placed against the field on both axes: how highly rated they
+ *  were, and how their pace actually came out. The basis of the
+ *  iRating-vs-pace scatter, which answers "who punched above their rating".
+ *
+ *  `medianDeltaMs` is that driver's median lap-time delta to the field median
+ *  at the same lap numbers, so it already cancels out track evolution and time
+ *  of day — negative means quicker than the field. */
+export interface RatingVsPacePoint {
+  custId: number;
+  driverName: string;
+  teamId: number;
+  teamName: string;
+  iRating: number;
+  medianDeltaMs: number;
+  lapsCounted: number;
+  /** True for drivers in the team the dashboard is currently focused on, so
+   *  the UI can highlight them against the rest of the field. */
+  isOurTeam: boolean;
+}
+
+/** One point on a smoothed pace trend line — a rolling median of a car's own
+ *  lap times, drawn over the per-lap scatter on the race timeline so the
+ *  underlying pace is readable through lap-to-lap noise. See
+ *  computeSmoothedPace() for why it's a median rather than a mean. */
+export interface SmoothedPacePoint {
+  lapNumber: number;
+  smoothedLapTimeMs: number;
+}
+
+/** Track/weather conditions observed across a set of laps — built from
+ *  Garage61's per-lap weather columns (the only source of conditions data;
+ *  the iRacing JSON export carries none). `undefined` from
+ *  computeConditionsSummary() when none of the supplied laps carry
+ *  Garage61 weather data.
+ *
+ *  Garage61 exports have no track-name or car-name column at all, only
+ *  this per-lap telemetry — conditions is the only "session context" data
+ *  actually available to derive, not a stand-in for track/car metadata. */
+export interface ConditionsSummary {
+  trackTempMinC: number;
+  trackTempMaxC: number;
+  airTempMinC: number;
+  airTempMaxC: number;
+  // Highest Garage61 "Track Wetness" reading observed (0 = bone dry) — a
+  // max rather than an average since a session that goes from dry to wet
+  // partway through should surface as "got wet," not be diluted to "damp."
+  maxTrackWetnessPct: number;
+  avgWindVelocityMs: number;
 }
 
 /** Headline, at-a-glance numbers for our team's race — the KPI strip at the

@@ -13,7 +13,14 @@ export type {
   PositionStint,
   RaceSummary,
   RaceKpis,
+  ConditionsSummary,
+  SmoothedPacePoint,
+  DriverRating,
+  EventMeta,
+  FieldStrengthPoint,
+  RatingVsPacePoint,
   RawIracingExport,
+  RawIracingEventResultExport,
 } from "./types/race-data";
 
 export { parseGarage61Csv } from "./parsers/garage61-csv";
@@ -31,3 +38,13 @@ export type { TeamOption } from "./transforms/race-summary";
 export { computeRaceKpis } from "./transforms/race-kpis";
 export { computeFieldPace, computeOurPaceVsField } from "./transforms/field-pace";
 export { computePositionStints } from "./transforms/position-stints";
+export { computeConditionsSummary } from "./transforms/conditions";
+export { computeSmoothedPace } from "./transforms/smooth";
+export {
+  isEventResultExport,
+  parseEventResultMeta,
+  parseEventResultDriverRatings,
+  decodeLicense,
+} from "./parsers/iracing-event-result";
+export { computeFieldStrength } from "./transforms/field-strength";
+export { computeRatingVsPace, fitRatingPaceTrend } from "./transforms/rating-vs-pace";

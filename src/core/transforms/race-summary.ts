@@ -2,6 +2,7 @@ import type {
   GapTrendPoint,
   LapRecord,
   RaceSummary,
+  RawIracingEventResultExport,
   RawIracingExport,
   RawIracingFinishingPosition,
   TeamRaceResult,
@@ -9,6 +10,12 @@ import type {
 import { computeDriverPaceStats } from "./pace";
 import { computeFieldPace, computeOurPaceVsField } from "./field-pace";
 import { computePositionStints } from "./position-stints";
+import { computeFieldStrength } from "./field-strength";
+import { computeRatingVsPace, fitRatingPaceTrend } from "./rating-vs-pace";
+import {
+  parseEventResultDriverRatings,
+  parseEventResultMeta,
+} from "../parsers/iracing-event-result";
 
 /** Enough info to let a user pick "which team is mine" before RaceSummary
  *  can be built — exists so the UI never has to import a Raw* type just to
@@ -76,6 +83,12 @@ export function buildRaceSummary(
   raw: RawIracingExport,
   allLaps: LapRecord[],
   ourTeamId: number,
+  /** Optional third upload — the iRacing event_result summary. Supplies
+   *  per-driver ratings, iRacing's published SoF, and track/car names, none of
+   *  which the lap-chart export carries. Everything derived from it is left
+   *  undefined when absent, so the dashboard degrades cleanly to the two-file
+   *  flow rather than showing zeros. */
+  eventResult?: RawIracingEventResultExport,
 ): RaceSummary {
   const lapsByCustId = new Map<number, LapRecord[]>();
   for (const lap of allLaps) {
@@ -107,9 +120,22 @@ export function buildRaceSummary(
 
   const raceLengthLaps = allLaps.reduce((max, l) => Math.max(max, l.lapNumber), 0);
 
-  const fieldPace = computeFieldPace(raw, {
-    carClassId: ourEntry.finishing_position.car_class_id,
-  });
+  const ourCarClassId = ourEntry.finishing_position.car_class_id;
+  const fieldPace = computeFieldPace(raw, { carClassId: ourCarClassId });
+
+  // Everything below is event_result-derived and therefore optional.
+  const driverRatings = eventResult ? parseEventResultDriverRatings(eventResult) : undefined;
+  const eventMeta = eventResult ? parseEventResultMeta(eventResult, ourCarClassId) : undefined;
+  const fieldStrength =
+    eventResult && driverRatings
+      ? computeFieldStrength(raw, driverRatings, { carClassId: ourCarClassId })
+      : undefined;
+  const ratingVsPace =
+    eventResult && driverRatings
+      ? computeRatingVsPace(raw, fieldPace, driverRatings, ourTeamId, {
+          carClassId: ourCarClassId,
+        })
+      : undefined;
 
   return {
     subsessionId: raw.subsession_id,
@@ -121,5 +147,10 @@ export function buildRaceSummary(
     paceVsField: computeOurPaceVsField(ourTeamLaps, fieldPace),
     positionStints: computePositionStints(ourTeamLaps),
     weatherTimeline,
+    eventMeta,
+    driverRatings,
+    fieldStrength,
+    ratingVsPace,
+    ratingPaceTrend: ratingVsPace ? fitRatingPaceTrend(ratingVsPace) : undefined,
   };
 }

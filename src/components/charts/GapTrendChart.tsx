@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { CHART_AXIS, CHART_GRIDLINE, CHART_TEXT_MUTED, seriesColor } from "./chart-theme";
+import { useMemo } from "react";
+import type { EChartsOption } from "echarts";
+import { EChart } from "./EChart";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapAxis, rowValue, seriesColor } from "./chart-theme";
 
 export interface GapTrendChartProps {
   /** One row per lap our team appears in. `gapSeconds` is null for laps
@@ -18,52 +11,60 @@ export interface GapTrendChartProps {
    *  car was lapped) — rendered as a break in the line rather than
    *  connecting through, since the two aren't the same unit. */
   data: Array<{ lapNumber: number; gapSeconds: number | null }>;
+  /** Last lap to show, so the axis ends at the real race/session distance
+   *  instead of ECharts rounding up to a "nice" number and leaving dead
+   *  space to the right. */
+  maxLap: number;
 }
 
-export function GapTrendChart({ data }: GapTrendChartProps) {
-  return (
-    <div className="chart-root h-64 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-          <CartesianGrid stroke={CHART_GRIDLINE} strokeDasharray="0" vertical={false} />
-          <XAxis
-            dataKey="lapNumber"
-            type="number"
-            stroke={CHART_AXIS}
-            tick={{ fill: CHART_TEXT_MUTED, fontSize: 12 }}
-            label={{ value: "Lap", position: "insideBottom", offset: -4, fill: CHART_TEXT_MUTED }}
-          />
-          <YAxis
-            stroke={CHART_AXIS}
-            tick={{ fill: CHART_TEXT_MUTED, fontSize: 12 }}
-            label={{
-              value: "Gap to leader (s)",
-              angle: -90,
-              position: "insideLeft",
-              fill: CHART_TEXT_MUTED,
-            }}
-          />
-          <ReferenceLine y={0} stroke={CHART_AXIS} />
-          <Tooltip
-            formatter={(value) =>
-              value === null || value === undefined
-                ? "lapped (no time gap)"
-                : `${Number(value).toFixed(1)}s`
-            }
-            labelFormatter={(lap) => `Lap ${lap}`}
-          />
-          <Line
-            type="monotone"
-            dataKey="gapSeconds"
-            name="Gap to leader"
-            stroke={seriesColor(0)}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+export function GapTrendChart({ data, maxLap }: GapTrendChartProps) {
+  const option = useMemo<EChartsOption>(
+    () => ({
+      grid: { left: 62, right: 20, top: 14, bottom: GRID_BOTTOM_WITH_ZOOM },
+      tooltip: {
+        ...TOOLTIP,
+        trigger: "axis",
+        axisPointer: { type: "line", lineStyle: { color: C.line2 } },
+        formatter: (params) => {
+          const rows = axisRows(params);
+          const lap = rows[0]?.axisValue;
+          const v = rows[0] ? rowValue(rows[0]) : null;
+          const body =
+            v === null
+              ? `<span style="color:${C.faint}">lapped (no time gap)</span>`
+              : `<b>${v.toFixed(1)}s</b>`;
+          return `Lap ${lap}<br/>${body}`;
+        },
+      },
+      xAxis: lapAxis(maxLap),
+      yAxis: {
+        type: "value",
+        scale: true,
+        ...AXIS,
+        axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => `${v.toFixed(0)}s` },
+      },
+      dataZoom: dataZoom(),
+      series: [
+        {
+          name: "Gap to leader",
+          type: "line" as const,
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: seriesColor(0), width: 1.8 },
+          itemStyle: { color: seriesColor(0) },
+          data: data.map((d) => [d.lapNumber, d.gapSeconds] as [number, number | null]),
+          markLine: {
+            silent: true,
+            symbol: "none",
+            label: { show: false },
+            lineStyle: { color: C.line2, width: 1, type: "solid" },
+            data: [{ yAxis: 0 }],
+          },
+        },
+      ],
+    }),
+    [data, maxLap],
   );
+
+  return <EChart option={option} height={280} ariaLabel="Gap to the race leader, lap by lap" />;
 }

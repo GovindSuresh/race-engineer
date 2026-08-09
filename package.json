@@ -11,10 +11,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "echarts": "^6.1.0",
     "next": "16.2.11",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "recharts": "^3.10.1"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
