@@ -33,7 +33,9 @@ export interface PickerDriver {
 export interface PickerRun {
   slot: number;
   label: string;
-  fileName: string;
+  /** Where the run came from — an uploaded filename, or a Garage61 session
+   *  description on the account path. */
+  sourceLabel: string;
   color: string;
   handDroppedCount: number;
   drivers: PickerDriver[];
@@ -124,7 +126,7 @@ export function LapPicker({
                   {run.label}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-faint">
-                  {run.fileName}
+                  {run.sourceLabel}
                 </span>
                 {run.handDroppedCount > 0 && (
                   <Tag tone="warn">−{run.handDroppedCount}</Tag>
