@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, dataZoom, lapAxis, seriesColor, verticalBands } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, dataZoom, lapCategoryAxis, seriesColor, verticalBands } from "./chart-theme";
 import { formatLapTime } from "@/lib/format";
 
 export interface PaceLapPoint {
@@ -139,7 +139,7 @@ export function PaceOverTimeChart({
           return parts.join("<br/>");
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         // Lap times cluster in a narrow band far from zero — without
@@ -149,7 +149,7 @@ export function PaceOverTimeChart({
         ...AXIS,
         axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => formatLapTime(v * 1000) },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series,
     };
   }, [driverNames, laps, smoothed, fieldMedian, maxLap]);
