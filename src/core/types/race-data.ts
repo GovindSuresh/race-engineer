@@ -304,7 +304,17 @@ export interface LapRecord {
   // pitIn/pitOut, which are undefined for the rest of the field.
   pitAffected?: boolean;
   fuelUsed?: number;
+  // Litres in the tank at the START of this lap, and — on a pit-out lap —
+  // BEFORE that stop's refuel is applied. Confirmed against all 583
+  // consecutive lap pairs in /ref_data: fuelLevel[n] - fuelUsed[n] +
+  // fuelAdded[n] === fuelLevel[n+1]. Do not read it as end-of-lap.
   fuelLevel?: number;
+  // Litres put in during this lap, straight from the Garage61 "Fuel added"
+  // column — 0 on every non-pit lap. This is an exact figure; it must never
+  // be re-derived from the difference between two fuelLevel readings, which
+  // cannot see the fill at all (see the note above: on the pit-out lap the
+  // reading predates the fill, so the delta only recovers one lap's burn).
+  fuelAdded?: number;
   sectorTimes?: [number | null, number | null, number | null, number | null];
   weather?: WeatherSnapshot;
 }
@@ -316,8 +326,15 @@ export interface Stint {
   startLap: number;
   endLap: number;
   laps: LapRecord[];
+  // Litres on board leaving the box (start of the first lap, refuel
+  // included) and crossing the line for the last time (end of the final lap).
   fuelAtStart: number;
   fuelAtEnd: number;
+  // Litres added at the stop that STARTED this stint — summed from the exact
+  // Garage61 "Fuel added" column over this stint's laps, which in practice
+  // means the pit-out lap. `undefined` only when no lap carried the column
+  // (a non-Garage61 source), never 0-as-unknown: 0 means a genuine no-fuel
+  // stop, e.g. a tyres-only or repairs-only service.
   fuelAddedAtPrevStop?: number;
   avgLapTimeMs: number;
   bestLapTimeMs: number;

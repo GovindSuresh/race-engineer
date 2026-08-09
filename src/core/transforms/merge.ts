@@ -40,6 +40,7 @@ export function mergeGarage61IntoIracing(
       pitOut: row.pitOut,
       fuelUsed: row.fuelUsed,
       fuelLevel: row.fuelLevel,
+      fuelAdded: row.fuelAdded,
       sectorTimes: [row.sector1, row.sector2, row.sector3, row.sector4] as LapRecord["sectorTimes"],
       weather: {
         trackTempC: row.trackTempC,
