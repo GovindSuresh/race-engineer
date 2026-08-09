@@ -77,6 +77,10 @@ export default function StintPlanner() {
   const [hiddenRuns, setHiddenRuns] = useState<Set<number>>(new Set());
   const [cleanLapsOnly, setCleanLapsOnly] = useState(false);
   const [excludePitLaps, setExcludePitLaps] = useState(false);
+  // Defaults ON: quitting out during the final stop is the normal way a
+  // practice run ends, so the part-lap it leaves behind is noise far more
+  // often than it's data. Still a toggle, so nothing is silently discarded.
+  const [dropFinalLap, setDropFinalLap] = useState(true);
 
   function clearSlotExclusions(slot: number) {
     setExcludedLaps((prev) => {
@@ -161,6 +165,15 @@ export default function StintPlanner() {
   const processedRuns = useMemo<ProcessedRun[]>(() => {
     return runs.flatMap((run, slot) => {
       if (!run || hiddenRuns.has(slot)) return [];
+
+      // The session's very last lap, across all its drivers — not each
+      // driver's own last lap, which mid-session is just a driver change.
+      // Only meaningful with something left to analyse afterwards, hence the
+      // >1 guard on a single-lap run.
+      const allLapNumbers = run.drivers.flatMap((d) => d.laps.map((l) => l.lapNumber));
+      const finalLapNumber =
+        dropFinalLap && allLapNumbers.length > 1 ? Math.max(...allLapNumbers) : null;
+
       return [
         {
           slot,
@@ -170,13 +183,20 @@ export default function StintPlanner() {
             const effectiveLaps = driver.laps.map((l) => {
               const isExcluded = excluded?.has(l.lapNumber) ?? false;
               const failsCleanFilter = cleanLapsOnly && l.isClean !== true;
+              // A run normally ends by quitting out during the last pit stop,
+              // which leaves a part-lap Garage61 still reports as a lap: 52-60s
+              // against ~124s green on the sample exports. It skews averages and
+              // wins "best lap" outright. It also arrives with pitIn and pitOut
+              // both false — G61 only flags a COMPLETED out-lap — so the pit
+              // filter can't catch it and it needs its own switch.
+              const isFinalLap = l.lapNumber === finalLapNumber;
               // Independent of the clean filter on purpose: Garage61's "Clean"
               // flag is its own heuristic and doesn't reliably mark in/out
               // laps, so "no pit laps" has to be its own switch. Note we blank
               // the lap TIME rather than dropping the lap, which keeps
               // pitIn/pitOut intact so stint boundaries don't move.
               const failsPitFilter = excludePitLaps && (l.pitIn === true || l.pitOut === true);
-              return isExcluded || failsCleanFilter || failsPitFilter
+              return isExcluded || failsCleanFilter || failsPitFilter || isFinalLap
                 ? { ...l, lapTimeMs: -1 }
                 : l;
             });
@@ -189,7 +209,7 @@ export default function StintPlanner() {
         },
       ];
     });
-  }, [runs, excludedLaps, hiddenRuns, cleanLapsOnly, excludePitLaps]);
+  }, [runs, excludedLaps, hiddenRuns, cleanLapsOnly, excludePitLaps, dropFinalLap]);
 
   const lapTimeChart = useMemo(() => {
     const series: RunLapTimeSeries[] = [];
@@ -262,6 +282,11 @@ export default function StintPlanner() {
               active={excludePitLaps}
               onToggle={() => setExcludePitLaps((v) => !v)}
             />
+            <Toggle
+              label="Drop final lap"
+              active={dropFinalLap}
+              onToggle={() => setDropFinalLap((v) => !v)}
+            />
           </>
         )}
       </AppHeader>
@@ -320,6 +345,12 @@ export default function StintPlanner() {
                       <span className="text-pgreen">
                         Pit laps are excluded, so in- and out-laps no longer drag the averages —
                         stint boundaries and fuel figures are unaffected.
+                      </span>
+                    )}{" "}
+                    {dropFinalLap && (
+                      <span className="text-pgreen">
+                        Each run&apos;s last lap is dropped, on the assumption the session was quit
+                        during the final stop — turn it off if you ran a run to completion.
                       </span>
                     )}
                   </>
