@@ -76,6 +76,7 @@ export default function StintPlanner() {
   const [expandedStints, setExpandedStints] = useState<Set<string>>(new Set());
   const [hiddenRuns, setHiddenRuns] = useState<Set<number>>(new Set());
   const [cleanLapsOnly, setCleanLapsOnly] = useState(false);
+  const [excludePitLaps, setExcludePitLaps] = useState(false);
 
   function clearSlotExclusions(slot: number) {
     setExcludedLaps((prev) => {
@@ -169,7 +170,15 @@ export default function StintPlanner() {
             const effectiveLaps = driver.laps.map((l) => {
               const isExcluded = excluded?.has(l.lapNumber) ?? false;
               const failsCleanFilter = cleanLapsOnly && l.isClean !== true;
-              return isExcluded || failsCleanFilter ? { ...l, lapTimeMs: -1 } : l;
+              // Independent of the clean filter on purpose: Garage61's "Clean"
+              // flag is its own heuristic and doesn't reliably mark in/out
+              // laps, so "no pit laps" has to be its own switch. Note we blank
+              // the lap TIME rather than dropping the lap, which keeps
+              // pitIn/pitOut intact so stint boundaries don't move.
+              const failsPitFilter = excludePitLaps && (l.pitIn === true || l.pitOut === true);
+              return isExcluded || failsCleanFilter || failsPitFilter
+                ? { ...l, lapTimeMs: -1 }
+                : l;
             });
             return {
               driverName: driver.driverName,
@@ -180,7 +189,7 @@ export default function StintPlanner() {
         },
       ];
     });
-  }, [runs, excludedLaps, hiddenRuns, cleanLapsOnly]);
+  }, [runs, excludedLaps, hiddenRuns, cleanLapsOnly, excludePitLaps]);
 
   const lapTimeChart = useMemo(() => {
     const series: RunLapTimeSeries[] = [];
@@ -248,6 +257,11 @@ export default function StintPlanner() {
               active={cleanLapsOnly}
               onToggle={() => setCleanLapsOnly((v) => !v)}
             />
+            <Toggle
+              label="No pit laps"
+              active={excludePitLaps}
+              onToggle={() => setExcludePitLaps((v) => !v)}
+            />
           </>
         )}
       </AppHeader>
@@ -300,6 +314,12 @@ export default function StintPlanner() {
                       <span className="text-pgreen">
                         Clean-laps-only is on, so incident and off-track laps are excluded from every
                         pace figure.
+                      </span>
+                    )}{" "}
+                    {excludePitLaps && (
+                      <span className="text-pgreen">
+                        Pit laps are excluded, so in- and out-laps no longer drag the averages —
+                        stint boundaries and fuel figures are unaffected.
                       </span>
                     )}
                   </>
@@ -386,9 +406,10 @@ export default function StintPlanner() {
                 tagline="what each fuel run cost"
                 note={
                   <>
-                    <b className="text-muted">Fuel added</b> is inferred from the jump in fuel level
-                    across a stop — the column to read when comparing a short-fill strategy against
-                    a full tank. <b className="text-muted">Pace trend</b> is the lap-time slope
+                    <b className="text-muted">Fuel added</b> is Garage61&apos;s exact figure for the
+                    stop that started this stint — the column to read when comparing a short-fill
+                    strategy against a full tank. <b className="text-muted">Pace trend</b> is the
+                    lap-time slope
                     within the stint (positive = getting slower); it reflects fuel burn-off and
                     traffic as much as tyres, so don&apos;t read it as degradation alone. Expand a
                     stint to include or exclude individual laps.
