@@ -89,8 +89,11 @@ function niceStep(max: number, targetTicks = 7): number {
   return Math.max(1, Math.round(10 * magnitude));
 }
 
-/** The shared x-axis for every lap-indexed chart: ends exactly at the session's
- *  last lap, with round tick labels.
+/** Lap x-axis for charts WITHOUT a dataZoom slider (currently only the stint
+ *  Gantt). Anything carrying a slider wants `lapCategoryAxis` instead — see
+ *  the note there for why a value axis can't step in whole laps.
+ *
+ *  Ends exactly at the session's last lap, with round tick labels.
  *
  *  Both halves of that need care. Letting ECharts pick the max rounds up to the
  *  next "nice" number and leaves dead space (a 609-lap race would run the axis
@@ -117,6 +120,48 @@ export function lapAxis(maxLap: number) {
   };
 }
 
+/** The shared lap x-axis for every chart carrying a dataZoom slider.
+ *
+ *  A CATEGORY axis, deliberately, even though lap numbers are numeric. On a
+ *  value axis ECharts' dataZoom window is continuous — it lands on "lap 418.7"
+ *  and there is no `step` option to prevent it. Correcting the window after
+ *  each dataZoom event doesn't work either: ECharts recomputes it from the raw
+ *  pointer on every mousemove, so the correction is instantly undone and the
+ *  handle visibly jitters, feeling like resistance. A category axis makes the
+ *  dataZoom index-based, so the slider steps one whole lap at a time natively,
+ *  with no event handling at all.
+ *
+ *  Categories are the contiguous run 0..maxLap, which makes category INDEX
+ *  equal to LAP NUMBER. That's what lets callers stay unchanged: ECharts reads
+ *  a numeric first element of a data pair as the index on a category axis, so
+ *  `[lapNumber, value]` series data and lap-numbered markLine/markArea
+ *  coordinates keep working exactly as they did on the value axis. */
+export function lapCategoryAxis(maxLap: number) {
+  const step = niceStep(maxLap);
+  return {
+    type: "category" as const,
+    data: Array.from({ length: Math.max(maxLap, 0) + 1 }, (_, i) => i),
+    // Points sit on the axis edges rather than inset by half a category, so a
+    // line still starts flush against the y axis at lap 0.
+    boundaryGap: false,
+    ...AXIS,
+    splitLine: { show: false },
+    // On a category axis `interval` is how many labels to SKIP between shown
+    // ones, so step - 1 puts labels on round lap numbers (0, 100, 200, ...).
+    // showMaxLabel then drops the final label unless it's already on that grid,
+    // which is what stops "609" colliding with "600".
+    axisLabel: {
+      ...AXIS.axisLabel,
+      interval: step - 1,
+      showMaxLabel: maxLap % step === 0,
+    },
+    name: "Lap",
+    nameLocation: "middle" as const,
+    nameGap: 26,
+    nameTextStyle: { color: C.faint, fontSize: 11 },
+  };
+}
+
 /** Category-axis label styling for the axis that names things (drivers, teams)
  *  rather than measures them — condensed display font, brighter than a value
  *  axis, since these are labels the reader looks up rather than scans past. */
@@ -135,15 +180,22 @@ export const GRID_BOTTOM_WITH_ZOOM = 66;
 
 /** A draggable zoom range below the plot plus scroll/pinch zoom inside it.
  *  Worth having on any lap-indexed chart: a 24h race is 600+ laps, far more
- *  than fits legibly at once. */
-export function dataZoom(): NonNullable<EChartsOption["dataZoom"]> {
+ *  than fits legibly at once.
+ *
+ *  `minValueSpan` is the narrowest window the user can zoom to, in axis units
+ *  — pass 1 on a lap axis so scroll-zoom stops at a single lap. It does NOT
+ *  make the window land on whole laps; that needs `snapDataZoom` on <EChart>,
+ *  since ECharts has no step for a dataZoom over a value axis. */
+export function dataZoom(minValueSpan?: number): NonNullable<EChartsOption["dataZoom"]> {
   return [
     {
       type: "inside",
       filterMode: "none",
+      minValueSpan,
     },
     {
       type: "slider",
+      minValueSpan,
       height: 18,
       bottom: 8,
       backgroundColor: C.panel2,

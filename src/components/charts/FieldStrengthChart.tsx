@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapAxis } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapCategoryAxis } from "./chart-theme";
 
 export interface FieldStrengthChartProps {
   data: Array<{
@@ -50,7 +50,7 @@ export function FieldStrengthChart({
           ].join("<br/>");
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         // iRating sits in the thousands, so anchoring at zero would flatten the
@@ -59,7 +59,7 @@ export function FieldStrengthChart({
         ...AXIS,
         axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => String(Math.round(v)) },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series: [
         {
           name: "Avg iRating on track",

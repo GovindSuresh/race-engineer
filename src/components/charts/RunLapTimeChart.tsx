@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, axisRows, dataZoom, lapAxis, rowValue, seriesColor } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, rowValue, seriesColor } from "./chart-theme";
 import { formatLapTime } from "@/lib/format";
 
 export interface RunLapTimeSeries {
@@ -51,14 +51,14 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
           return `Lap ${lap}<br/>${body}`;
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         scale: true,
         ...AXIS,
         axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => formatLapTime(v * 1000) },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series: series.map((s) => ({
         name: s.label,
         type: "line" as const,
@@ -76,5 +76,11 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
     [series, data, maxLap],
   );
 
-  return <EChart option={option} height={340} ariaLabel="Lap times across the uploaded runs" />;
+  return (
+    <EChart
+      option={option}
+      height={340}
+      ariaLabel="Lap times across the uploaded runs"
+    />
+  );
 }

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapAxis, rowValue, seriesColor } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, rowValue, seriesColor } from "./chart-theme";
 
 export interface GapTrendChartProps {
   /** One row per lap our team appears in. `gapSeconds` is null for laps
@@ -36,14 +36,14 @@ export function GapTrendChart({ data, maxLap }: GapTrendChartProps) {
           return `Lap ${lap}<br/>${body}`;
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         scale: true,
         ...AXIS,
         axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => `${v.toFixed(0)}s` },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series: [
         {
           name: "Gap to leader",
@@ -66,5 +66,11 @@ export function GapTrendChart({ data, maxLap }: GapTrendChartProps) {
     [data, maxLap],
   );
 
-  return <EChart option={option} height={280} ariaLabel="Gap to the race leader, lap by lap" />;
+  return (
+    <EChart
+      option={option}
+      height={280}
+      ariaLabel="Gap to the race leader, lap by lap"
+    />
+  );
 }

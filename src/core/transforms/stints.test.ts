@@ -54,32 +54,47 @@ describe("deriveStints", () => {
     expect(stint.avgLapTimeMs).toBe(138000); // (140000 + 136000) / 2
   });
 
-  it("backs out fuelAtStart from the first lap's end-of-lap reading + that lap's usage", () => {
-    const laps = [makeLap({ lapNumber: 0, fuelLevel: 97, fuelUsed: 3 })];
+  // fuelLevel is a START-of-lap reading (verified across every consecutive
+  // lap pair in /ref_data), and on a pit-out lap it predates that stop's
+  // refuel — so leaving the box is reading + fuelAdded, and end-of-stint is
+  // the last lap's reading minus that lap's own burn.
+  it("reads fuelAtStart as the first lap's start-of-lap level plus that lap's refuel", () => {
+    const laps = [makeLap({ lapNumber: 0, pitOut: true, fuelLevel: 20, fuelAdded: 80, fuelUsed: 3 })];
     const [stint] = deriveStints(laps);
     expect(stint.fuelAtStart).toBe(100);
-    expect(stint.fuelAtEnd).toBe(97);
+    expect(stint.fuelAtEnd).toBe(17); // 20 - 3
   });
 
-  it("leaves fuelAddedAtPrevStop undefined for the first stint of the race", () => {
+  it("takes the final lap's own burn off fuelAtEnd", () => {
+    const laps = [
+      makeLap({ lapNumber: 0, fuelLevel: 50, fuelUsed: 3 }),
+      makeLap({ lapNumber: 1, fuelLevel: 47, fuelUsed: 3 }),
+    ];
+    const [stint] = deriveStints(laps);
+    expect(stint.fuelAtEnd).toBe(44);
+  });
+
+  it("leaves fuelAddedAtPrevStop undefined when no lap carries the Garage61 column", () => {
     const laps = [makeLap({ lapNumber: 0 })];
     const [stint] = deriveStints(laps);
     expect(stint.fuelAddedAtPrevStop).toBeUndefined();
   });
 
-  it("computes fuelAddedAtPrevStop as the jump between stints' fuel readings", () => {
+  it("takes fuelAddedAtPrevStop from the exact Fuel added column, not a fuel-level delta", () => {
     const laps = [
-      makeLap({ lapNumber: 0, pitIn: true, fuelLevel: 5, fuelUsed: 3 }), // ends stint 1 with 5L left
-      makeLap({ lapNumber: 1, pitOut: true, fuelLevel: 97, fuelUsed: 3 }), // stint 2 starts with 97+3=100L
+      makeLap({ lapNumber: 0, pitIn: true, fuelLevel: 8, fuelUsed: 3, fuelAdded: 0 }),
+      // The pit-out reading predates the fill, so the old level-delta approach
+      // saw only ~3L here. The column says 77L, and 77L is the answer.
+      makeLap({ lapNumber: 1, pitOut: true, fuelLevel: 5, fuelUsed: 3, fuelAdded: 77 }),
     ];
     const stints = deriveStints(laps);
-    expect(stints[1].fuelAddedAtPrevStop).toBe(95); // 100 - 5
+    expect(stints[1].fuelAddedAtPrevStop).toBe(77);
   });
 
-  it("clamps a small negative fuel delta (measurement noise) to 0 rather than reporting negative fuel added", () => {
+  it("reports 0 for a genuine no-fuel service rather than treating it as unknown", () => {
     const laps = [
-      makeLap({ lapNumber: 0, pitIn: true, fuelLevel: 10, fuelUsed: 3 }), // ends stint 1 with 10L
-      makeLap({ lapNumber: 1, pitOut: true, fuelLevel: 6, fuelUsed: 3 }), // stint 2 "starts" with 9L (< 10L, no real refuel)
+      makeLap({ lapNumber: 0, pitIn: true, fuelLevel: 30, fuelUsed: 3, fuelAdded: 0 }),
+      makeLap({ lapNumber: 1, pitOut: true, fuelLevel: 27, fuelUsed: 3, fuelAdded: 0 }),
     ];
     const stints = deriveStints(laps);
     expect(stints[1].fuelAddedAtPrevStop).toBe(0);

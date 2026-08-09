@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapAxis, seriesColor, verticalBands } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, seriesColor, verticalBands } from "./chart-theme";
 
 export interface PaceVsFieldChartProps {
   /** One row per lap we completed. `deltaSeconds` is null both when the
@@ -50,7 +50,7 @@ export function PaceVsFieldChart({ data, maxLap }: PaceVsFieldChartProps) {
           return `Lap ${lap}<br/><b style="color:${color}">${v > 0 ? "+" : ""}${v.toFixed(2)}s</b> vs field median`;
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         scale: true,
@@ -60,7 +60,7 @@ export function PaceVsFieldChart({ data, maxLap }: PaceVsFieldChartProps) {
           formatter: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`,
         },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series: [
         {
           name: "Delta to field",

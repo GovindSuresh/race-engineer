@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, axisRows, dataZoom, lapAxis, rowValue, seriesColor } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, rowValue, seriesColor } from "./chart-theme";
 
 export interface TrackPositionChartProps {
   /** Fixed order — colors are assigned by index, same convention as
@@ -38,7 +38,7 @@ export function TrackPositionChart({ driverNames, data, maxLap }: TrackPositionC
           return `Lap ${lap}<br/>${body}`;
         },
       },
-      xAxis: lapAxis(maxLap),
+      xAxis: lapCategoryAxis(maxLap),
       yAxis: {
         type: "value",
         // P1 belongs at the TOP — a lower position number is a better result,
@@ -49,7 +49,7 @@ export function TrackPositionChart({ driverNames, data, maxLap }: TrackPositionC
         ...AXIS,
         axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => `P${v}` },
       },
-      dataZoom: dataZoom(),
+      dataZoom: dataZoom(1),
       series: driverNames.map((name, i) => ({
         name,
         type: "line" as const,
@@ -66,5 +66,11 @@ export function TrackPositionChart({ driverNames, data, maxLap }: TrackPositionC
     [driverNames, data, maxLap],
   );
 
-  return <EChart option={option} height={300} ariaLabel="Track position lap by lap, per driver" />;
+  return (
+    <EChart
+      option={option}
+      height={300}
+      ariaLabel="Track position lap by lap, per driver"
+    />
+  );
 }
