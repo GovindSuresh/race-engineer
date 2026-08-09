@@ -13,7 +13,9 @@ import {
   garage61OnlyToLapRecords,
   lapRuleMatches,
   parseGarage61Csv,
+  garage61SessionTypeLabel,
   LAP_FILTER_KEYS,
+  type Garage61Session,
   type LapFilterKey,
   type LapFilters,
   type LapRecord,
@@ -36,10 +38,25 @@ import {
 import { StickySelectionBar } from "@/components/StickySelectionBar";
 import type { PickerRun } from "@/components/LapPicker";
 import { useScrolledPast } from "@/hooks/useScrolledPast";
+import { useGarage61 } from "@/hooks/useGarage61";
+import { Garage61ConnectPanel } from "@/components/Garage61ConnectPanel";
+import { Garage61SessionPicker } from "@/components/Garage61SessionPicker";
 import { seriesColor } from "@/components/charts/chart-theme";
 import { RunLapTimeChart, type RunLapTimeSeries } from "@/components/charts/RunLapTimeChart";
 
 const MAX_RUNS = 4;
+
+/** Names a Garage61 session the way a filename names an upload — enough to
+ *  tell four slots apart at a glance. */
+function sessionLabel(session: Garage61Session): string {
+  const when = Date.parse(session.startedAt);
+  const date = Number.isFinite(when)
+    ? new Date(when).toLocaleDateString(undefined, { day: "2-digit", month: "short" })
+    : "—";
+  return [date, garage61SessionTypeLabel(session.sessionType), session.carName]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 /** UI labels for the core filter keys. Kept beside the page rather than in
  *  /core, which stays free of presentation. */
@@ -63,9 +80,18 @@ interface DriverRun {
 }
 
 interface RunData {
-  fileName: string;
+  /** What this run is called in the UI — a filename on the upload path, a
+   *  session description on the Garage61 account path. Both paths produce the
+   *  same `LapRecord[]`, so nothing below here cares which it was. */
+  label: string;
+  source: RunSource;
+  /** Set only on the account path, so the session picker can show which of its
+   *  rows are already loaded into a slot. */
+  sessionKey?: string;
   drivers: DriverRun[];
 }
+
+type RunSource = "csv" | "garage61";
 
 interface ProcessedDriver {
   driverName: string;
@@ -86,7 +112,7 @@ interface ProcessedDriver {
 
 interface ProcessedRun {
   slot: number;
-  fileName: string;
+  label: string;
   /** The lap `dropFinalLap` targets, resolved per run. Kept here so the lap
    *  picker can report which rules hit a given lap without recomputing it. */
   finalLap: number | null;
@@ -134,6 +160,16 @@ export default function StintPlanner() {
   const [barOpen, setBarOpen] = useState(false);
   const [selectionSectionRef, scrolledPastSelection] = useScrolledPast();
 
+  // Where runs come from. Uploading stays the default so the app works with no
+  // account at all; the API path is an alternative, never a replacement.
+  const [runSource, setRunSource] = useState<RunSource>("csv");
+  const [sessions, setSessions] = useState<Garage61Session[]>([]);
+  const garage61 = useGarage61();
+
+  async function handleSessionSearch(filters: Parameters<typeof garage61.fetchSessions>[0]) {
+    setSessions(await garage61.fetchSessions(filters));
+  }
+
   function clearSlotExclusions(slot: number) {
     setExcludedLaps((prev) => {
       const next = { ...prev };
@@ -144,31 +180,53 @@ export default function StintPlanner() {
     });
   }
 
+  /** Groups one run's laps by driver. Shared by both load paths — a practice
+   *  session can be shared, and the rest of the page already handles that. */
+  function toDriverRuns(laps: LapRecord[]): DriverRun[] {
+    const lapsByDriver = new Map<string, LapRecord[]>();
+    for (const lap of laps) {
+      if (!lapsByDriver.has(lap.driverName)) lapsByDriver.set(lap.driverName, []);
+      lapsByDriver.get(lap.driverName)!.push(lap);
+    }
+    return [...lapsByDriver.entries()].map(([driverName, driverLaps]) => ({
+      driverName,
+      laps: driverLaps,
+    }));
+  }
+
   async function handleFileChange(slot: number, file: File) {
     setErrors((prev) => prev.map((e, i) => (i === slot ? null : e)));
     clearSlotExclusions(slot);
 
     try {
       const rows = parseGarage61Csv(await file.text());
-      const laps = garage61OnlyToLapRecords(rows, file.name);
+      const drivers = toDriverRuns(garage61OnlyToLapRecords(rows, file.name));
 
-      const lapsByDriver = new Map<string, LapRecord[]>();
-      for (const lap of laps) {
-        if (!lapsByDriver.has(lap.driverName)) lapsByDriver.set(lap.driverName, []);
-        lapsByDriver.get(lap.driverName)!.push(lap);
-      }
-
-      const drivers: DriverRun[] = [...lapsByDriver.entries()].map(([driverName, driverLaps]) => ({
-        driverName,
-        laps: driverLaps,
-      }));
-
-      setRuns((prev) => prev.map((r, i) => (i === slot ? { fileName: file.name, drivers } : r)));
+      setRuns((prev) =>
+        prev.map((r, i) => (i === slot ? { label: file.name, source: "csv", drivers } : r)),
+      );
     } catch (err) {
       setErrors((prev) =>
         prev.map((e, i) => (i === slot ? (err instanceof Error ? err.message : String(err)) : e)),
       );
     }
+  }
+
+  /** The account path's counterpart to `handleFileChange`. The session's laps
+   *  arrive already narrowed to the CSV's row shape, so this skips the parse
+   *  and joins the shared pipeline at exactly the same point. */
+  function handleSessionSelected(slot: number, session: Garage61Session) {
+    setErrors((prev) => prev.map((e, i) => (i === slot ? null : e)));
+    clearSlotExclusions(slot);
+
+    const label = sessionLabel(session);
+    const drivers = toDriverRuns(garage61OnlyToLapRecords(session.rows, label));
+
+    setRuns((prev) =>
+      prev.map((r, i) =>
+        i === slot ? { label, source: "garage61", sessionKey: session.key, drivers } : r,
+      ),
+    );
   }
 
   function clearSlot(slot: number) {
@@ -247,7 +305,7 @@ export default function StintPlanner() {
       return [
         {
           slot,
-          fileName: run.fileName,
+          label: run.label,
           finalLap: runFinalLap,
           drivers: run.drivers.map((driver) => {
             const filtered = applyLapFilters(driver.laps, filters, {
@@ -355,7 +413,7 @@ export default function StintPlanner() {
       return {
         slot: run.slot,
         label: `Run ${run.slot + 1}`,
-        fileName: run.fileName,
+        sourceLabel: run.label,
         color: seriesColor(run.slot),
         handDroppedCount: drivers.reduce(
           (sum, d) => sum + d.stints.reduce((s, st) => s + st.handDroppedCount, 0),
@@ -479,24 +537,110 @@ export default function StintPlanner() {
             eyebrow="/// Session data"
             title="Practice runs"
             tagline="up to four, compared side by side"
-            note="Each slot takes one Garage61 CSV export. Colours here match the charts and tables below, so a run keeps the same identity throughout — clearing a slot never repaints the others."
+            note="Each slot takes one practice session — a Garage61 CSV export, or a session pulled straight from a connected Garage61 account. Colours here match the charts and tables below, so a run keeps the same identity throughout — clearing a slot never repaints the others."
           />
           <Panel className="mt-3.5">
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: MAX_RUNS }, (_, slot) => (
-                <FileUploadButton
-                  key={slot}
-                  label={`Run ${slot + 1}`}
-                  labelColor={seriesColor(slot)}
-                  accept=".csv"
-                  fileName={runs[slot]?.fileName}
-                  onFileSelected={(file) => handleFileChange(slot, file)}
-                  onClear={() => clearSlot(slot)}
-                  error={errors[slot]}
-                  resetKey={resetKeys[slot]}
-                />
+            {/* Two ways to fill the same four slots. Uploading is the default
+                and works with no account; the two can be mixed freely, since
+                both produce identical LapRecords. */}
+            <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-line pb-3.5">
+              <span className="mr-1 font-display text-[13px] uppercase tracking-[0.1em] text-muted">
+                Load from
+              </span>
+              {(
+                [
+                  ["csv", "CSV upload"],
+                  ["garage61", "Garage61 account"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRunSource(value)}
+                  aria-pressed={runSource === value}
+                  className={`rounded-sm border px-2.5 py-1 font-display text-[13px] uppercase tracking-[0.06em] transition-colors ${
+                    runSource === value
+                      ? "border-amber text-amber"
+                      : "border-line2 text-muted hover:text-text"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
             </div>
+
+            {runSource === "csv" ? (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: MAX_RUNS }, (_, slot) => (
+                  <FileUploadButton
+                    key={slot}
+                    label={`Run ${slot + 1}`}
+                    labelColor={seriesColor(slot)}
+                    accept=".csv"
+                    fileName={runs[slot]?.label}
+                    onFileSelected={(file) => handleFileChange(slot, file)}
+                    onClear={() => clearSlot(slot)}
+                    error={errors[slot]}
+                    resetKey={resetKeys[slot]}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <Garage61ConnectPanel
+                  status={garage61.status}
+                  profile={garage61.profile}
+                  connecting={garage61.connecting}
+                  error={garage61.connectError}
+                  onConnect={garage61.connect}
+                  onDisconnect={garage61.disconnect}
+                />
+
+                {garage61.status === "connected" && (
+                  <Garage61SessionPicker
+                    reference={garage61.reference}
+                    referenceError={garage61.referenceError}
+                    sessions={sessions}
+                    progress={garage61.progress}
+                    assignedKeys={runs.map((run) => run?.sessionKey ?? null)}
+                    slotColors={Array.from({ length: MAX_RUNS }, (_, slot) =>
+                      seriesColor(slot),
+                    )}
+                    onSearch={handleSessionSearch}
+                    onAssign={handleSessionSelected}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Loaded slots are listed whichever mode is showing, so switching
+                between them never looks like the runs were lost. */}
+            {hasAnyRun && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3.5">
+                {loadedSlots.map((slot) => (
+                  <span
+                    key={slot}
+                    className="flex items-center gap-2 rounded-sm border border-line2 px-2.5 py-1"
+                  >
+                    <Swatch color={seriesColor(slot)} />
+                    <span className="font-display text-[13px] uppercase tracking-[0.06em] text-text">
+                      Run {slot + 1}
+                    </span>
+                    <span className="max-w-[240px] truncate font-mono text-[11px] text-faint">
+                      {runs[slot]?.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => clearSlot(slot)}
+                      aria-label={`Clear run ${slot + 1}`}
+                      className="text-faint transition-colors hover:text-danger"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </Panel>
         </section>
 
@@ -652,7 +796,7 @@ export default function StintPlanner() {
                             Run {run.slot + 1}
                           </span>
                           <span className="truncate font-mono text-[11px] text-faint">
-                            {run.fileName}
+                            {run.label}
                           </span>
                         </div>
                         {conditions && <ConditionsSummaryCard conditions={conditions} />}

@@ -21,9 +21,26 @@ export type {
   RatingVsPacePoint,
   RawIracingExport,
   RawIracingEventResultExport,
+  RawGarage61Lap,
+  RawGarage61ApiList,
 } from "./types/race-data";
 
 export { parseGarage61Csv } from "./parsers/garage61-csv";
+export {
+  parseGarage61ApiLaps,
+  garage61ApiLapsToRows,
+  garage61ApiLapToRow,
+  garage61ApiDriverName,
+  garage61ApiSectorsToColumns,
+  sortGarage61ApiLaps,
+  describeGarage61LapShape,
+} from "./parsers/garage61-api";
+export type { Garage61LapShapeReport } from "./parsers/garage61-api";
+export {
+  groupG61ApiLapsIntoSessions,
+  garage61SessionTypeLabel,
+} from "./transforms/g61-sessions";
+export type { Garage61Session } from "./transforms/g61-sessions";
 export { parseIracingJson } from "./parsers/iracing-json";
 
 export { mergeGarage61IntoIracing } from "./transforms/merge";

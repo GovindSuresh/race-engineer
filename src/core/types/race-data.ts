@@ -262,6 +262,121 @@ export interface RawGarage61Row {
 }
 
 // ----------------------------------------------------------------------------
+// 1c. SOURCE TYPES — raw Garage61 REST API (GET /api/v1/laps)
+// ----------------------------------------------------------------------------
+//
+// The API is the Stint Planner's second Garage61 input, alongside the CSV
+// export above. Its lap object is a strict SUPERSET of the CSV's columns, so
+// `garage61ApiLapToRow` narrows it back to `RawGarage61Row` and everything
+// downstream (garage61OnlyToLapRecords → deriveStints → the UI) is shared.
+//
+// EVERY field is optional here, deliberately, even though the published docs
+// list most of them as always present. Garage61's API is a Go service (its
+// 404s are net/http's plain-text "404 page not found"), and Go's standard
+// `json:",omitempty"` drops zero numbers, empty strings and `false` booleans
+// from the payload entirely. So an absent `fuelAdded` almost certainly means
+// 0 litres, and an absent `pitIn` means false — the parser applies those
+// defaults rather than treating absence as an error. Confirm against a live
+// response once a token is available; see the plan's sequencing note.
+
+/** One entry of the `sectors` array. Documented only as `array<object>`, so
+ *  this covers the plausible shapes and the parser tolerates all of them.
+ *  Nothing reads `LapRecord.sectorTimes` today, so a wrong guess here is
+ *  inert — it costs a follow-up commit, not a broken feature. */
+export interface RawGarage61ApiSector {
+  number?: number;
+  sector?: number;
+  time?: number;
+  lapTime?: number;
+  duration?: number;
+}
+
+export interface RawGarage61ApiDriver {
+  slug?: string;
+  firstName?: string;
+  lastName?: string;
+  nickName?: string;
+}
+
+export interface RawGarage61ApiCar {
+  id?: number;
+  name?: string;
+  platform?: string;
+}
+
+export interface RawGarage61ApiTrack {
+  id?: number;
+  name?: string;
+  variant?: string;
+  platform?: string;
+}
+
+export interface RawGarage61ApiSeason {
+  id?: number;
+  name?: string;
+  shortName?: string;
+}
+
+export interface RawGarage61Lap {
+  id?: string;
+  lapTime?: number;          // SECONDS (float), like the CSV — not ms, not ticks
+  lapNumber?: number;
+  startTime?: string;        // ISO timestamp
+  run?: number;
+  // Identity of the session this lap belongs to. Together these are what
+  // groups laps back into "one practice session" — the unit a single CSV
+  // export represents, and therefore one Stint Planner run slot.
+  event?: string;
+  session?: number;
+  eventType?: number;        // 0 Unknown, 1 Race, 2 Practice, 3 Offline test,
+                             // 4 Time Trial, 5 Time Attack, 6 Qualifying
+  sessionType?: number;      // 1 Practice, 2 Qualifying, 3 Race
+  clean?: boolean;
+  incomplete?: boolean;
+  missing?: boolean;
+  discontinuity?: boolean;
+  offtrack?: boolean;
+  pitIn?: boolean;
+  pitOut?: boolean;
+  pitlane?: boolean;
+  joker?: boolean;
+  canViewSetup?: boolean;
+  canViewTelemetry?: boolean;
+  ghostAvailable?: boolean;
+  driverRating?: number;
+  tireCompound?: number;
+  powerAdjust?: number;
+  weightPenalty?: number;
+  fuelAdded?: number;
+  fuelUsed?: number;
+  fuelLevel?: number;
+  sectors?: RawGarage61ApiSector[];
+  // Conditions. Same quantities as the CSV's weather columns, different names.
+  precipitation?: number;
+  fogLevel?: number;
+  relativeHumidity?: number;
+  windDir?: number;
+  windVel?: number;
+  airPressure?: number;
+  airDensity?: number;
+  airTemp?: number;
+  clouds?: number;           // 1 Clear, 2 Partly, 3 Mostly cloudy, 4 Overcast
+  trackWetness?: number;     // percent, 0 dry .. 100 fully wet
+  trackUsage?: number;       // percent, 0 clean .. 100 fully rubbered in
+  trackTemp?: number;
+  driver?: RawGarage61ApiDriver | null;
+  car?: RawGarage61ApiCar;
+  track?: RawGarage61ApiTrack;
+  season?: RawGarage61ApiSeason | null;
+}
+
+/** Envelope every list endpoint returns (`/laps`, `/tracks`, `/cars`, …). */
+export interface RawGarage61ApiList<T> {
+  items?: T[];
+  total?: number;
+}
+
+// ----------------------------------------------------------------------------
 // 2. DOMAIN TYPES — normalized shape used by transforms and UI
 // ----------------------------------------------------------------------------
 
