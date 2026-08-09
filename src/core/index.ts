@@ -48,3 +48,17 @@ export {
 } from "./parsers/iracing-event-result";
 export { computeFieldStrength } from "./transforms/field-strength";
 export { computeRatingVsPace, fitRatingPaceTrend } from "./transforms/rating-vs-pace";
+export {
+  applyLapFilters,
+  countLapSelection,
+  finalLapNumber,
+  lapRuleMatches,
+  LAP_FILTER_KEYS,
+} from "./transforms/lap-selection";
+export type {
+  LapFilters,
+  LapFilterKey,
+  LapSelectionCounts,
+  DriverLapSelection,
+  RunLapSelection,
+} from "./transforms/lap-selection";

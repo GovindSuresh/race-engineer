@@ -13,10 +13,17 @@ export function AppHeader({
   /** Context line beside the title, e.g. the event or file name. */
   context,
   children,
+  /** A full-width row rendered beneath the title row and INSIDE the same sticky
+   *  element — for a bar that has to stack under the header without knowing the
+   *  header's height. A second `sticky` sibling would need `top` set to that
+   *  height as a hard-coded pixel value; this needs no such number. Supplies no
+   *  padding or max-width of its own, so the bar owns its own layout. */
+  below,
 }: {
   title: string;
   context?: React.ReactNode;
   children?: React.ReactNode;
+  below?: React.ReactNode;
 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-bg/[0.93] backdrop-blur-md">
@@ -37,6 +44,7 @@ export function AppHeader({
         <div className="flex-1" />
         {children}
       </div>
+      {below}
     </header>
   );
 }
