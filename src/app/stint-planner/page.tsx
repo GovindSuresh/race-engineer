@@ -222,7 +222,11 @@ export default function StintPlanner() {
   // account at all; the API path is an alternative, never a replacement.
   const [runSource, setRunSource] = useState<RunSource>("csv");
   const [sessions, setSessions] = useState<Garage61Session[]>([]);
-  const garage61 = useGarage61();
+  // Gated on the source toggle so the CSV path — the default, and the one that
+  // needs no account — never touches the Garage61 API. Garage61 asks callers to
+  // keep request volume controlled, and the cheapest request is the one that
+  // isn't made.
+  const garage61 = useGarage61(runSource === "garage61");
 
   async function handleSessionSearch(filters: Parameters<typeof garage61.fetchSessions>[0]) {
     setSessions(await garage61.fetchSessions(filters));
