@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LapRecord, WeatherSnapshot } from "../types/race-data";
-import { computeConditionsSummary, hasWeatherReading, trackWetnessLabel } from "./conditions";
+import {
+  computeConditionsSummary,
+  computeMeanTrackTempC,
+  hasWeatherReading,
+  trackWetnessLabel,
+} from "./conditions";
 
 function weather(overrides: Partial<WeatherSnapshot> = {}): WeatherSnapshot {
   return {
@@ -153,6 +158,39 @@ describe("computeConditionsSummary", () => {
 
   it("counts the laps a summary actually rests on", () => {
     expect(computeConditionsSummary([makeLap(), makeLap(), makeLap()])!.lapsWithReading).toBe(3);
+  });
+});
+
+describe("computeMeanTrackTempC", () => {
+  it("averages the track temperature over the laps given", () => {
+    const laps = [
+      makeLap({ weather: weather({ trackTempC: 28 }) }),
+      makeLap({ weather: weather({ trackTempC: 32 }) }),
+    ];
+    expect(computeMeanTrackTempC(laps)).toBe(30);
+  });
+
+  it("returns null rather than 0 when nothing usable is there", () => {
+    expect(computeMeanTrackTempC([])).toBeNull();
+    expect(computeMeanTrackTempC([{ ...makeLap(), weather: undefined }])).toBeNull();
+  });
+
+  // The whole point of it being per stint: a run-wide mean would flatten this.
+  it("excludes the not-recorded sentinel instead of averaging in a 0°C lap", () => {
+    const laps = [
+      makeLap({ weather: weather({ trackTempC: 30 }) }),
+      makeLap({ weather: weather({ trackTempC: 0, airTempC: 0, trackWetness: -1 }) }),
+    ];
+    expect(computeMeanTrackTempC(laps)).toBe(30);
+  });
+
+  it("agrees with the summary's mean over the same laps", () => {
+    const laps = [
+      makeLap({ weather: weather({ trackTempC: 21 }) }),
+      makeLap({ weather: weather({ trackTempC: 26 }) }),
+      makeLap({ weather: weather({ trackTempC: 34 }) }),
+    ];
+    expect(computeMeanTrackTempC(laps)).toBe(computeConditionsSummary(laps)!.trackTempAvgC);
   });
 });
 

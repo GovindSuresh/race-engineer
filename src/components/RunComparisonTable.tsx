@@ -3,7 +3,7 @@
 import { trackWetnessLabel, type RunComparison } from "@/core";
 import { Delta, Swatch, Table, TableWrap, Td, Th, Tr } from "@/components/DataTable";
 import { runColor } from "@/components/charts/chart-theme";
-import { formatLapTime, formatTrackUsage } from "@/lib/format";
+import { formatCelsius, formatLapTime, formatTrackUsage } from "@/lib/format";
 
 export interface RunComparisonTableProps {
   runs: RunComparison[];
@@ -32,10 +32,6 @@ function signedSeconds(ms: number): string {
 
 function signedLitres(value: number): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)} L`;
-}
-
-function degrees(value: number | null): string {
-  return value === null ? DASH : `${value.toFixed(1)}°C`;
 }
 
 function signedDegrees(value: number): string {
@@ -268,7 +264,7 @@ export function RunComparisonTable({
                     value={c?.trackTempAvgC ?? null}
                     baseline={baseC?.trackTempAvgC ?? null}
                     isBaseline={isBaseline}
-                    format={degrees}
+                    format={formatCelsius}
                     formatDelta={signedDegrees}
                     neutral
                     className="border-l border-line2"

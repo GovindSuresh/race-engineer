@@ -46,6 +46,27 @@ export function hasWeatherReading(weather: WeatherSnapshot): boolean {
   return !(weather.trackTempC === 0 && weather.airTempC === 0);
 }
 
+/** Mean track temperature across a set of laps, or null if none carry a
+ *  usable reading.
+ *
+ *  Track temperature is the one condition that moves enough WITHIN a run to
+ *  matter: measured across a real 24h race, it swung up to 7.8°C inside a
+ *  single 23-lap stint, where air temperature moved ~0.3°C over the same
+ *  laps. That makes it worth reporting per stint, which is what this exists
+ *  for — `computeConditionsSummary` is the right call when more than one
+ *  figure is wanted.
+ *
+ *  Note the resolution: iRacing reports track temperature in whole °F, so
+ *  readings land on 0.56°C steps and drift finer than that is invisible. */
+export function computeMeanTrackTempC(laps: LapRecord[]): number | null {
+  const temps = laps
+    .map((l) => l.weather)
+    .filter((w): w is WeatherSnapshot => w !== undefined)
+    .filter(hasWeatherReading)
+    .map((w) => w.trackTempC);
+  return temps.length > 0 ? average(temps) : null;
+}
+
 /** Summarizes track/weather conditions across a set of laps, from
  *  Garage61's per-lap weather data (`LapRecord.weather`). Returns
  *  `undefined` if none of the laps carry it (iRacing-only laps, an

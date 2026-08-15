@@ -67,6 +67,7 @@ export { computeFieldPace, computeOurPaceVsField } from "./transforms/field-pace
 export { computePositionStints } from "./transforms/position-stints";
 export {
   computeConditionsSummary,
+  computeMeanTrackTempC,
   hasWeatherReading,
   trackWetnessLabel,
 } from "./transforms/conditions";

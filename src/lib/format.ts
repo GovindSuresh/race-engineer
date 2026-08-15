@@ -19,6 +19,12 @@ export function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+/** Formats a temperature, or an em dash when there's no reading — which is
+ *  distinct from 0°C and must not be shown as one. */
+export function formatCelsius(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)}°C`;
+}
+
 /** Formats a `ConditionsSummary`'s track-usage (rubber) figures.
  *
  *  Collapses to a single value when the run never changed state, which is

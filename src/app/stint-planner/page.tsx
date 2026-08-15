@@ -10,6 +10,7 @@ import {
   computeFuelBurnRate,
   computeAverageFuelBurnRate,
   computeConditionsSummary,
+  computeMeanTrackTempC,
   computeRunComparison,
   computeRunLapDistributions,
   garage61OnlyToLapRecords,
@@ -25,7 +26,7 @@ import {
   type RunLapSelection,
   type Stint,
 } from "@/core";
-import { formatLapTime } from "@/lib/format";
+import { formatCelsius, formatLapTime } from "@/lib/format";
 import { AppHeader } from "@/components/AppHeader";
 import { SectionHeading } from "@/components/SectionHeading";
 import { Panel, PanelHeading } from "@/components/Panel";
@@ -806,13 +807,14 @@ export default function StintPlanner() {
                         <Th>Pit stops</Th>
                         <Th>Fuel used</Th>
                         <Th>Avg burn</Th>
+                        <Th>Track °C</Th>
                       </tr>
                     </thead>
                     <tbody>
                       {processedRuns.flatMap((run) =>
                         run.drivers.map((driver) => {
-                          const validTimes = driver.stints
-                            .flatMap((s) => s.laps)
+                          const countingLaps = driver.stints.flatMap((s) => s.laps);
+                          const validTimes = countingLaps
                             .map((l) => l.lapTimeMs)
                             .filter((t) => t > 0);
                           const bestLapTimeMs =
@@ -843,6 +845,11 @@ export default function StintPlanner() {
                               <Td>{Math.max(0, driver.stints.length - 1)}</Td>
                               <Td>{totalFuelUsed.toFixed(1)}L</Td>
                               <Td>{computeAverageFuelBurnRate(driver.stints).toFixed(2)}L</Td>
+                              {/* Over the same laps the pace columns average,
+                                  so the temperature belongs to those laps. */}
+                              <Td className="text-muted">
+                                {formatCelsius(computeMeanTrackTempC(countingLaps))}
+                              </Td>
                             </Tr>
                           );
                         }),
@@ -973,6 +980,7 @@ export default function StintPlanner() {
                                     <Th>Fuel added</Th>
                                     <Th>Burn rate</Th>
                                     <Th>Pace trend</Th>
+                                    <Th>Track °C</Th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1032,11 +1040,19 @@ export default function StintPlanner() {
                                           </Td>
                                           <Td>{computeFuelBurnRate(stint).toFixed(2)}L</Td>
                                           <Td>{formatTrend(trend)}</Td>
+                                          {/* Per stint rather than per run:
+                                              track temperature is the one
+                                              condition that moves enough
+                                              within a run to explain the pace
+                                              trend sitting next to it. */}
+                                          <Td className="text-muted">
+                                            {formatCelsius(computeMeanTrackTempC(stint.laps))}
+                                          </Td>
                                         </Tr>
                                         {isExpanded && (
                                           <tr>
                                             <td />
-                                            <td colSpan={7} className="border-b border-line pb-3 pl-3">
+                                            <td colSpan={8} className="border-b border-line pb-3 pl-3">
                                               <table className="w-full max-w-sm border-collapse font-mono text-[11px]">
                                                 <thead>
                                                   <tr className="text-faint">
