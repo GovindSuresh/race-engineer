@@ -59,10 +59,13 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
           if (p.seriesType === "scatter") {
             const point = outliers[p.dataIndex];
             if (!point) return "";
+            // Run, lap, time — nothing else. An outlier is a single lap, and
+            // the session name it belongs to is already on the axis and in the
+            // box's own tooltip.
             const run = withData[point.value[0]];
             return (
-              `${runHeading(run)}<br/>` +
-              `<span style="color:${C.faint}">outlier · lap ${point.lapNumber}</span><br/>` +
+              `<b>Run ${(run?.slot ?? 0) + 1}</b> ` +
+              `<span style="color:${C.faint}">lap ${point.lapNumber}</span><br/>` +
               `<b>${formatLapTime(point.value[1] * 1000)}</b>`
             );
           }
