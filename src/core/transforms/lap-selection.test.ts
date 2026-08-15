@@ -4,7 +4,9 @@ import {
   applyLapFilters,
   countLapSelection,
   finalLapNumber,
+  lapRuleContext,
   lapRuleMatches,
+  openingLapNumber,
   type LapFilters,
   type RunLapSelection,
 } from "./lap-selection";
@@ -26,6 +28,7 @@ const NO_FILTERS: LapFilters = {
   cleanLapsOnly: false,
   excludePitLaps: false,
   dropFinalLap: false,
+  dropOpeningLap: false,
 };
 
 /** Four timed laps: 1 clean, 2 unclean, 3 a pit-in, 4 the run's last. */
@@ -65,7 +68,7 @@ describe("lapRuleMatches", () => {
   it("names every rule that matches, regardless of any filter state", () => {
     // A pit in-lap that's also the run's last and flagged unclean.
     const lap = makeLap({ lapNumber: 4, pitIn: true, isClean: false });
-    expect(lapRuleMatches(lap, 4).sort()).toEqual([
+    expect(lapRuleMatches(lap, { runFinalLap: 4, runOpeningLap: null }).sort()).toEqual([
       "cleanLapsOnly",
       "dropFinalLap",
       "excludePitLaps",
@@ -73,17 +76,17 @@ describe("lapRuleMatches", () => {
   });
 
   it("returns nothing for an ordinary clean green lap", () => {
-    expect(lapRuleMatches(makeLap({ lapNumber: 2 }), 9)).toEqual([]);
+    expect(lapRuleMatches(makeLap({ lapNumber: 2 }), { runFinalLap: 9, runOpeningLap: null })).toEqual([]);
   });
 
   it("agrees with applyLapFilters about which laps a filter set drops", () => {
     const laps = sampleRun().drivers[0].laps;
     const filters: LapFilters = { ...NO_FILTERS, excludePitLaps: true, dropFinalLap: true };
-    const blanked = applyLapFilters(laps, filters, { runFinalLap: 4 })
+    const blanked = applyLapFilters(laps, filters, { runFinalLap: 4, runOpeningLap: null })
       .filter((l) => l.lapTimeMs <= 0)
       .map((l) => l.lapNumber);
     const flagged = laps
-      .filter((l) => lapRuleMatches(l, 4).some((key) => filters[key]))
+      .filter((l) => lapRuleMatches(l, { runFinalLap: 4, runOpeningLap: null }).some((key) => filters[key]))
       .map((l) => l.lapNumber);
     expect(flagged).toEqual(blanked);
   });
@@ -94,6 +97,7 @@ describe("applyLapFilters", () => {
     const laps = [makeLap({ lapNumber: 3, pitIn: true, fuelUsed: 3, fuelAdded: 77 })];
     const [lap] = applyLapFilters(laps, { ...NO_FILTERS, excludePitLaps: true }, {
       runFinalLap: null,
+      runOpeningLap: null,
     });
     expect(lap.lapTimeMs).toBe(-1);
     expect(lap.pitIn).toBe(true);
@@ -103,7 +107,7 @@ describe("applyLapFilters", () => {
 
   it("drops nothing when no rule is on and nothing is hand-picked", () => {
     const laps = sampleRun().drivers[0].laps;
-    const result = applyLapFilters(laps, NO_FILTERS, { runFinalLap: 4 });
+    const result = applyLapFilters(laps, NO_FILTERS, { runFinalLap: 4, runOpeningLap: null });
     expect(result.map((l) => l.lapTimeMs)).toEqual([138000, 138000, 138000, 138000]);
   });
 
@@ -111,6 +115,7 @@ describe("applyLapFilters", () => {
     const laps = sampleRun().drivers[0].laps;
     const result = applyLapFilters(laps, { ...NO_FILTERS, cleanLapsOnly: true }, {
       runFinalLap: null,
+      runOpeningLap: null,
     });
     expect(result.filter((l) => l.lapTimeMs <= 0).map((l) => l.lapNumber)).toEqual([2]);
   });
@@ -123,6 +128,7 @@ describe("applyLapFilters", () => {
     ];
     const result = applyLapFilters(laps, { ...NO_FILTERS, excludePitLaps: true }, {
       runFinalLap: null,
+      runOpeningLap: null,
     });
     expect(result.filter((l) => l.lapTimeMs <= 0).map((l) => l.lapNumber)).toEqual([1, 2]);
   });
@@ -133,12 +139,73 @@ describe("applyLapFilters", () => {
     const laps = [makeLap({ lapNumber: 4, lapTimeMs: 56340 })];
     const result = applyLapFilters(laps, { ...NO_FILTERS, excludePitLaps: true }, {
       runFinalLap: 4,
+      runOpeningLap: null,
     });
     expect(result[0].lapTimeMs).toBe(56340);
     const dropped = applyLapFilters(laps, { ...NO_FILTERS, dropFinalLap: true }, {
       runFinalLap: 4,
+      runOpeningLap: null,
     });
     expect(dropped[0].lapTimeMs).toBe(-1);
+  });
+
+  // Lap 0 is the garage out-lap in practice and qualifying, and the procession
+  // lap in a race. Neither is a lap of the car, and neither is reliably caught
+  // by excludePitLaps — G61 only flags a COMPLETED out-lap, and a formation
+  // lap is not a pit lap at all.
+  it("drops the run's opening lap independently of the pit filter", () => {
+    const laps = [
+      makeLap({ lapNumber: 0, lapTimeMs: 172_030 }),
+      makeLap({ lapNumber: 1 }),
+      makeLap({ lapNumber: 2 }),
+    ];
+    const untouched = applyLapFilters(laps, { ...NO_FILTERS, excludePitLaps: true }, {
+      runFinalLap: null,
+      runOpeningLap: 0,
+    });
+    expect(untouched[0].lapTimeMs).toBe(172_030);
+
+    const dropped = applyLapFilters(laps, { ...NO_FILTERS, dropOpeningLap: true }, {
+      runFinalLap: null,
+      runOpeningLap: 0,
+    });
+    expect(dropped.filter((l) => l.lapTimeMs <= 0).map((l) => l.lapNumber)).toEqual([0]);
+  });
+
+  it("drops the run's first lap even when the export doesn't start at lap 0", () => {
+    const run: RunLapSelection = {
+      drivers: [{ laps: [makeLap({ lapNumber: 3 }), makeLap({ lapNumber: 4 })] }],
+    };
+    expect(openingLapNumber(run)).toBe(3);
+
+    const dropped = applyLapFilters(
+      run.drivers[0].laps,
+      { ...NO_FILTERS, dropOpeningLap: true },
+      lapRuleContext(run),
+    );
+    expect(dropped.filter((l) => l.lapTimeMs <= 0).map((l) => l.lapNumber)).toEqual([3]);
+  });
+
+  it("leaves a one-lap run alone, so opening and final rules can't blank everything", () => {
+    const run: RunLapSelection = { drivers: [{ laps: [makeLap({ lapNumber: 0 })] }] };
+    expect(openingLapNumber(run)).toBeNull();
+
+    const result = applyLapFilters(
+      run.drivers[0].laps,
+      { ...NO_FILTERS, dropOpeningLap: true, dropFinalLap: true },
+      lapRuleContext(run),
+    );
+    expect(result[0].lapTimeMs).toBeGreaterThan(0);
+  });
+
+  it("takes the opening lap across all of a run's drivers, not one driver's first", () => {
+    const run: RunLapSelection = {
+      drivers: [
+        { laps: [makeLap({ lapNumber: 5 }), makeLap({ lapNumber: 6 })] },
+        { laps: [makeLap({ lapNumber: 0 }), makeLap({ lapNumber: 1 })] },
+      ],
+    };
+    expect(openingLapNumber(run)).toBe(0);
   });
 
   it("drops hand-picked laps with every rule off", () => {
@@ -146,6 +213,7 @@ describe("applyLapFilters", () => {
     const result = applyLapFilters(laps, NO_FILTERS, {
       excludedLapNumbers: new Set([1, 4]),
       runFinalLap: null,
+      runOpeningLap: null,
     });
     expect(result.filter((l) => l.lapTimeMs <= 0).map((l) => l.lapNumber)).toEqual([1, 4]);
   });
@@ -175,22 +243,25 @@ describe("countLapSelection", () => {
       cleanLapsOnly: 1,
       excludePitLaps: 1,
       dropFinalLap: 1,
+      dropOpeningLap: 1,
     });
     expect(counts.counted).toBe(4); // nothing actually dropped
   });
 
   it("keeps counted + byRule + byHand equal to total when rules overlap", () => {
-    // Lap 3 is both a pit lap and hand-picked; lap 2 is unclean AND (with all
-    // three rules on) nothing else. Overlap must not double-count.
+    // Every rule on, and they overlap: lap 1 is the opening lap, lap 2 is
+    // unclean, lap 3 is a pit lap AND hand-picked, lap 4 is the final lap.
+    // Overlap must not double-count.
     const counts = countLapSelection([sampleRun(new Set([3]))], {
       cleanLapsOnly: true,
       excludePitLaps: true,
       dropFinalLap: true,
+      dropOpeningLap: true,
     });
     expect(counts.total).toBe(4);
     expect(counts.byHand).toBe(1); // lap 3, hand-pick wins the attribution
-    expect(counts.byRule).toBe(2); // laps 2 and 4
-    expect(counts.counted).toBe(1); // lap 1
+    expect(counts.byRule).toBe(3); // laps 1, 2 and 4
+    expect(counts.counted).toBe(0);
     expect(counts.counted + counts.byRule + counts.byHand).toBe(counts.total);
   });
 
@@ -221,7 +292,12 @@ describe("countLapSelection", () => {
       counted: 0,
       byRule: 0,
       byHand: 0,
-      wouldDrop: { cleanLapsOnly: 0, excludePitLaps: 0, dropFinalLap: 0 },
+      wouldDrop: {
+        cleanLapsOnly: 0,
+        excludePitLaps: 0,
+        dropFinalLap: 0,
+        dropOpeningLap: 0,
+      },
     });
   });
 });

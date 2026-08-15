@@ -18,8 +18,16 @@ export type Garage61ConnectionStatus = "checking" | "disconnected" | "connected"
 export interface Garage61LapFilters {
   trackId: number | null;
   carId: number | null;
-  /** Team slug to pull teammates' laps for, or null for just your own. */
+  /** Team slug to narrow the search to that team's drivers, or null for
+   *  Garage61's default (you and everyone you share data with). */
   teamSlug: string | null;
+  /** Your laps only.
+   *
+   *  Garage61's `drivers` parameter takes the literal keyword `me` — verified
+   *  against the live API, which rejects slugs, ULIDs and numeric ids with a
+   *  400 "Invalid drivers parameter". Being a 400 rather than a silent
+   *  no-op is the useful part: a wrong value here fails loudly. */
+  onlyMe: boolean;
   /** Maximum lap age in days, as Garage61's `age` parameter. */
   ageDays: number;
 }
@@ -175,9 +183,12 @@ export function useGarage61() {
           offset: String(laps.length),
         });
         if (filters.carId !== null) params.set("cars", String(filters.carId));
+        // `drivers=me` is the narrowest option and wins over a team: asking for
+        // your own laps within a team is still just your own laps.
+        if (filters.onlyMe) params.set("drivers", "me");
         // Without a team, Garage61 defaults to you and all your teammates;
         // naming one narrows it to that team's drivers.
-        if (filters.teamSlug) params.set("teams", filters.teamSlug);
+        else if (filters.teamSlug) params.set("teams", filters.teamSlug);
 
         let response: Response;
         try {

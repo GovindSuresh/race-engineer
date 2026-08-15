@@ -59,16 +59,39 @@ function buildStint(stintNumber: number, laps: LapRecord[]): Stint {
  *  upload, or Race Analysis after merging in the optional G61 upload).
  *
  *  `laps` must already be one driver's laps in ascending lapNumber order
- *  (as produced by the parsers). A pit-in lap ends a stint (it's the
- *  stint's final, slower in-lap); the following pit-out lap begins the
- *  next stint (its first, slower out-lap). */
+ *  (as produced by the parsers). A pit-in lap ends a stint (it's the stint's
+ *  final, slower in-lap); a pit-out lap begins one (its first, slower
+ *  out-lap).
+ *
+ *  BOTH flags are load-bearing, and splitting on `pitIn` alone is not enough.
+ *  Garage61 does not always have every lap: a stop whose in-lap is missing
+ *  from the data leaves only the out-lap behind, and a pitIn-only rule then
+ *  silently merges two stints into one — which is worse than a wrong number,
+ *  because the merged stint looks perfectly plausible while its fuel figures
+ *  and pace trend span a pit stop. Starting a stint at a pit-out lap recovers
+ *  the boundary from the half of the evidence that survived.
+ *
+ *  A lap flagged both pitIn and pitOut is a single lap that entered and left
+ *  the box (a long stop where the lap counter never advanced — there's one in
+ *  /ref_data at 4917s). That ends the stint and does NOT open one, so it stays
+ *  the in-lap it is rather than becoming a stint of its own. */
 export function deriveStints(laps: LapRecord[]): Stint[] {
   const stints: Stint[] = [];
   let currentStintLaps: LapRecord[] = [];
   let stintNumber = 1;
 
   for (const lap of laps) {
+    // An out-lap opens a stint, so anything still open belongs to the previous
+    // one and is closed BEFORE this lap joins. Skipped when nothing is open,
+    // which is the normal case: the pit-in immediately before already closed
+    // it, and this would otherwise emit an empty stint.
+    if (lap.pitOut && !lap.pitIn && currentStintLaps.length > 0) {
+      stints.push(buildStint(stintNumber++, currentStintLaps));
+      currentStintLaps = [];
+    }
+
     currentStintLaps.push(lap);
+
     if (lap.pitIn) {
       stints.push(buildStint(stintNumber++, currentStintLaps));
       currentStintLaps = [];

@@ -5,11 +5,13 @@ import {
   applyLapFilters,
   countLapSelection,
   deriveStints,
-  finalLapNumber,
+  lapRuleContext,
   computeStintPaceTrend,
   computeFuelBurnRate,
   computeAverageFuelBurnRate,
   computeConditionsSummary,
+  computeRunComparison,
+  computeRunLapDistributions,
   garage61OnlyToLapRecords,
   lapRuleMatches,
   parseGarage61Csv,
@@ -19,6 +21,7 @@ import {
   type LapFilterKey,
   type LapFilters,
   type LapRecord,
+  type LapRuleContext,
   type RunLapSelection,
   type Stint,
 } from "@/core";
@@ -41,8 +44,10 @@ import { useScrolledPast } from "@/hooks/useScrolledPast";
 import { useGarage61 } from "@/hooks/useGarage61";
 import { Garage61ConnectPanel } from "@/components/Garage61ConnectPanel";
 import { Garage61SessionPicker } from "@/components/Garage61SessionPicker";
-import { seriesColor } from "@/components/charts/chart-theme";
+import { runColor } from "@/components/charts/chart-theme";
 import { RunLapTimeChart, type RunLapTimeSeries } from "@/components/charts/RunLapTimeChart";
+import { RunPaceBoxplot } from "@/components/charts/RunPaceBoxplot";
+import { RunComparisonTable } from "@/components/RunComparisonTable";
 
 const MAX_RUNS = 4;
 
@@ -58,12 +63,43 @@ function sessionLabel(session: Garage61Session): string {
     .join(" · ");
 }
 
+function shortDate(iso: string | undefined): string | null {
+  const when = Date.parse(iso ?? "");
+  return Number.isFinite(when)
+    ? new Date(when).toLocaleDateString(undefined, { day: "2-digit", month: "short" })
+    : null;
+}
+
+/** Describes a run as date · driver · car — what actually distinguishes one
+ *  practice run from another, in the order you'd ask about them.
+ *
+ *  Beats the filename it replaces, which was whatever Garage61 happened to
+ *  call the export, and beats the session description on the account path,
+ *  which named the session type but not who drove it.
+ *
+ *  Each part is omitted when unknown rather than shown as a placeholder: a CSV
+ *  export carries no car column at all, so a CSV-loaded run is legitimately
+ *  "12 Jul · Ada Vance" and padding that with "—" would only add noise. */
+function runDescriptor(run: {
+  startedAt?: string;
+  carName?: string;
+  drivers: { driverName: string }[];
+}): string {
+  const drivers = run.drivers.map((driver) => driver.driverName).filter(Boolean);
+  return (
+    [shortDate(run.startedAt), drivers.length > 0 ? drivers.join(" + ") : null, run.carName]
+      .filter(Boolean)
+      .join(" · ") || "Unnamed run"
+  );
+}
+
 /** UI labels for the core filter keys. Kept beside the page rather than in
  *  /core, which stays free of presentation. */
 const RULE_LABELS: Record<LapFilterKey, string> = {
   cleanLapsOnly: "Clean laps only",
   excludePitLaps: "No pit laps",
   dropFinalLap: "Drop final lap",
+  dropOpeningLap: "Drop opening lap",
 };
 
 /** Terse forms of the same labels, for the per-lap "dropped by rule" column
@@ -72,6 +108,7 @@ const RULE_SHORT: Record<LapFilterKey, string> = {
   cleanLapsOnly: "unclean",
   excludePitLaps: "pit lap",
   dropFinalLap: "final lap",
+  dropOpeningLap: "opening lap",
 };
 
 interface DriverRun {
@@ -88,6 +125,13 @@ interface RunData {
   /** Set only on the account path, so the session picker can show which of its
    *  rows are already loaded into a slot. */
   sessionKey?: string;
+  /** ISO timestamp of the run's first lap. Captured at load because
+   *  `LapRecord` carries no time of its own, and the comparison table
+   *  identifies a run by when it was driven. */
+  startedAt?: string;
+  /** Only the account path knows this — the CSV export has no car column at
+   *  all, so a CSV-loaded run is described without one. */
+  carName?: string;
   drivers: DriverRun[];
 }
 
@@ -112,10 +156,16 @@ interface ProcessedDriver {
 
 interface ProcessedRun {
   slot: number;
+  /** Where the run came from — the filename, or the session description.
+   *  Still shown in section 04's per-run header, where provenance is what you
+   *  want; the comparison table uses `descriptor` instead. */
   label: string;
-  /** The lap `dropFinalLap` targets, resolved per run. Kept here so the lap
-   *  picker can report which rules hit a given lap without recomputing it. */
-  finalLap: number | null;
+  /** date · driver · car — see `runDescriptor`. */
+  descriptor: string;
+  /** The run-scoped bounds the rules need (first and last lap). Kept here so
+   *  the lap picker can report which rules hit a given lap without
+   *  recomputing them. */
+  ruleContext: LapRuleContext;
   drivers: ProcessedDriver[];
 }
 
@@ -147,14 +197,22 @@ export default function StintPlanner() {
   const [excludedLaps, setExcludedLaps] = useState<Record<string, Set<number>>>({});
   const [expandedStints, setExpandedStints] = useState<Set<string>>(new Set());
   const [hiddenRuns, setHiddenRuns] = useState<Set<number>>(new Set());
+  /** Run the comparison table measures the others against, or null for
+   *  absolute figures. Held here rather than in the table so the choice
+   *  survives the table re-rendering when a filter changes. */
+  const [baselineSlot, setBaselineSlot] = useState<number | null>(null);
   // `dropFinalLap` defaults ON: quitting out during the final stop is the
   // normal way a practice run ends, so the part-lap it leaves behind is noise
-  // far more often than it's data. Still a toggle, so nothing is silently
-  // discarded — and the selection panel shows what it removed.
+  // far more often than it's data. `dropOpeningLap` defaults ON for the mirror
+  // reason: lap 0 is the out-lap from the garage in practice and qualifying,
+  // and the procession lap in a race — never a representative lap of the car.
+  // Both are still toggles, so nothing is silently discarded — and the
+  // selection panel shows what each one removed.
   const [filters, setFilters] = useState<LapFilters>({
     cleanLapsOnly: false,
     excludePitLaps: false,
     dropFinalLap: true,
+    dropOpeningLap: true,
   });
   // Whether the sticky bar's copy of the selection panel is expanded.
   const [barOpen, setBarOpen] = useState(false);
@@ -201,9 +259,14 @@ export default function StintPlanner() {
     try {
       const rows = parseGarage61Csv(await file.text());
       const drivers = toDriverRuns(garage61OnlyToLapRecords(rows, file.name));
+      // Rows are in lap order, so the first one that carries a timestamp is
+      // when the run started.
+      const startedAt = rows.find((row) => row.startedAt)?.startedAt;
 
       setRuns((prev) =>
-        prev.map((r, i) => (i === slot ? { label: file.name, source: "csv", drivers } : r)),
+        prev.map((r, i) =>
+          i === slot ? { label: file.name, source: "csv", startedAt, drivers } : r,
+        ),
       );
     } catch (err) {
       setErrors((prev) =>
@@ -224,7 +287,16 @@ export default function StintPlanner() {
 
     setRuns((prev) =>
       prev.map((r, i) =>
-        i === slot ? { label, source: "garage61", sessionKey: session.key, drivers } : r,
+        i === slot
+          ? {
+              label,
+              source: "garage61",
+              sessionKey: session.key,
+              startedAt: session.startedAt,
+              carName: session.carName ?? undefined,
+              drivers,
+            }
+          : r,
       ),
     );
   }
@@ -300,17 +372,18 @@ export default function StintPlanner() {
   const processedRuns = useMemo<ProcessedRun[]>(() => {
     return runs.flatMap((run, slot) => {
       if (!run || hiddenRuns.has(slot)) return [];
-      const runFinalLap = finalLapNumber({ drivers: run.drivers });
+      const ruleContext = lapRuleContext({ drivers: run.drivers });
 
       return [
         {
           slot,
           label: run.label,
-          finalLap: runFinalLap,
+          descriptor: runDescriptor(run),
+          ruleContext,
           drivers: run.drivers.map((driver) => {
             const filtered = applyLapFilters(driver.laps, filters, {
               excludedLapNumbers: excludedLaps[exclusionKey(slot, driver.driverName)],
-              runFinalLap,
+              ...ruleContext,
             });
             // applyLapFilters maps 1:1 over driver.laps, so index i lines up and
             // each filtered lap is a distinct object reference — which is what
@@ -363,7 +436,7 @@ export default function StintPlanner() {
             label: namePerChip
               ? `R${slot + 1} ${driver.driverName} L${lapNumber}`
               : `R${slot + 1} L${lapNumber}`,
-            color: seriesColor(slot),
+            color: runColor(slot),
           });
           handPickIndex.set(key, { slot, driverName: driver.driverName, lapNumber });
         }
@@ -392,7 +465,7 @@ export default function StintPlanner() {
               lapNumber: lap.lapNumber,
               time: rawTimeMs > 0 ? formatLapTime(rawTimeMs) : null,
               handDropped: excluded?.has(lap.lapNumber) ?? false,
-              droppedBy: lapRuleMatches(lap, run.finalLap)
+              droppedBy: lapRuleMatches(lap, run.ruleContext)
                 .filter((key) => filters[key])
                 .map((key) => RULE_SHORT[key]),
             };
@@ -414,7 +487,7 @@ export default function StintPlanner() {
         slot: run.slot,
         label: `Run ${run.slot + 1}`,
         sourceLabel: run.label,
-        color: seriesColor(run.slot),
+        color: runColor(run.slot),
         handDroppedCount: drivers.reduce(
           (sum, d) => sum + d.stints.reduce((s, st) => s + st.handDroppedCount, 0),
           0,
@@ -431,19 +504,27 @@ export default function StintPlanner() {
     for (const run of processedRuns) {
       run.drivers.forEach((driver, driverIndex) => {
         const key = `run${run.slot}_driver${driverIndex}`;
+
+        // Which stint each lap belongs to, for the chart tooltip. Built here
+        // rather than in the chart because the stint boundaries are already
+        // known — the chart only ever sees a flat list of lap times.
+        const stintByLap: Record<number, number> = {};
+
         series.push({
           key,
           label:
             run.drivers.length > 1
               ? `Run ${run.slot + 1} — ${driver.driverName}`
               : `Run ${run.slot + 1}`,
-          colorIndex: run.slot,
+          slot: run.slot,
           dashed: driverIndex > 0,
+          stintByLap,
         });
 
         for (const stint of driver.stints) {
           for (const lap of stint.laps) {
             if (lap.lapTimeMs <= 0) continue;
+            stintByLap[lap.lapNumber] = stint.stintNumber;
             if (!rowsByLap.has(lap.lapNumber))
               rowsByLap.set(lap.lapNumber, { lapNumber: lap.lapNumber });
             rowsByLap.get(lap.lapNumber)![key] = lap.lapTimeMs / 1000;
@@ -464,6 +545,28 @@ export default function StintPlanner() {
     return { series, data, maxLap };
   }, [processedRuns]);
 
+  // One run = one row, whatever its driver count: a run is the unit being
+  // compared (a setup, a fuel load, a session), and splitting a driver-swap run
+  // into two rows would compare stints, not runs.
+  const comparisonInputs = useMemo(
+    () =>
+      processedRuns.map((run) => ({
+        slot: run.slot,
+        label: run.descriptor,
+        stints: run.drivers.flatMap((driver) => driver.stints),
+      })),
+    [processedRuns],
+  );
+
+  const runComparison = useMemo(
+    () => computeRunComparison(comparisonInputs),
+    [comparisonInputs],
+  );
+  const runDistributions = useMemo(
+    () => computeRunLapDistributions(comparisonInputs),
+    [comparisonInputs],
+  );
+
   const hasAnyRun = loadedSlots.length > 0;
   const showSelectionBar = hasAnyRun && scrolledPastSelection;
 
@@ -482,7 +585,7 @@ export default function StintPlanner() {
       runs={loadedSlots.map((slot) => ({
         slot,
         label: `Run ${slot + 1}`,
-        color: seriesColor(slot),
+        color: runColor(slot),
         visible: !hiddenRuns.has(slot),
       }))}
       onToggleRun={toggleRunVisible}
@@ -575,7 +678,7 @@ export default function StintPlanner() {
                   <FileUploadButton
                     key={slot}
                     label={`Run ${slot + 1}`}
-                    labelColor={seriesColor(slot)}
+                    labelColor={runColor(slot)}
                     accept=".csv"
                     fileName={runs[slot]?.label}
                     onFileSelected={(file) => handleFileChange(slot, file)}
@@ -604,7 +707,7 @@ export default function StintPlanner() {
                     progress={garage61.progress}
                     assignedKeys={runs.map((run) => run?.sessionKey ?? null)}
                     slotColors={Array.from({ length: MAX_RUNS }, (_, slot) =>
-                      seriesColor(slot),
+                      runColor(slot),
                     )}
                     onSearch={handleSessionSearch}
                     onAssign={handleSessionSelected}
@@ -622,7 +725,7 @@ export default function StintPlanner() {
                     key={slot}
                     className="flex items-center gap-2 rounded-sm border border-line2 px-2.5 py-1"
                   >
-                    <Swatch color={seriesColor(slot)} />
+                    <Swatch color={runColor(slot)} />
                     <span className="font-display text-[13px] uppercase tracking-[0.06em] text-text">
                       Run {slot + 1}
                     </span>
@@ -724,7 +827,7 @@ export default function StintPlanner() {
                           return (
                             <Tr key={`${run.slot}-${driver.driverName}`}>
                               <Td align="left">
-                                <Swatch color={seriesColor(run.slot)} />
+                                <Swatch color={runColor(run.slot)} />
                                 Run {run.slot + 1}
                               </Td>
                               <Td align="left">{driver.driverName}</Td>
@@ -751,7 +854,19 @@ export default function StintPlanner() {
                 eyebrow="02 · Pace"
                 title="Lap times across runs"
                 tagline="every lap, every run, one scale"
-                note="Drag below the chart to zoom into a stretch of laps, one lap at a time. Dropped laps are left out of the line entirely rather than plotted as a spike, so the y-axis stays scaled to real running pace — a gap in a line is a dropped lap."
+                note={
+                  <>
+                    Drag below the chart to zoom into a stretch of laps, one lap at a time.
+                    Dropped laps are left out of the line entirely rather than plotted as a
+                    spike, so the y-axis stays scaled to real running pace — a gap in a line
+                    is a dropped lap. A <b className="text-muted">diamond</b> marks each
+                    stint’s best counted lap, so you can read a run as the sequence of
+                    stints it was; the dashed amber line is the best lap of any run. Hover
+                    any lap to see which <b className="text-muted">stint</b> it belongs to,
+                    per run — stint boundaries aren’t drawn on the chart itself because
+                    every run has its own on this shared lap axis.
+                  </>
+                }
               />
               <Panel className="mt-3.5">
                 <RunLapTimeChart
@@ -764,7 +879,41 @@ export default function StintPlanner() {
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="03 · Stints"
+                eyebrow="03 · Compare"
+                title="Run against run"
+                tagline="the same numbers, pivoted"
+                note={
+                  <>
+                    Section 04 shows each run in full; this shows all of them side by side.
+                    Pick a run under <b className="text-muted">Compare against</b> to read the
+                    others as deltas from it — green is better, red is worse.{" "}
+                    <b className="text-muted">Spread</b> is the standard deviation of lap
+                    times: two runs can share an average and be nothing alike, and the
+                    tighter one is the one a driver can actually repeat. The boxplot shows
+                    the same thing visually — box edges are the quartiles, whiskers reach
+                    the last lap within 1.5×IQR, and anything past them is drawn as an
+                    outlier rather than stretching the whisker.
+                  </>
+                }
+              />
+
+              <Panel className="mt-3.5">
+                <RunComparisonTable
+                  runs={runComparison}
+                  baselineSlot={baselineSlot}
+                  onBaselineChange={setBaselineSlot}
+                />
+              </Panel>
+
+              <Panel className="mt-5">
+                <PanelHeading title="Lap-time distribution" />
+                <RunPaceBoxplot distributions={runDistributions} />
+              </Panel>
+            </section>
+
+            <section className="mt-11">
+              <SectionHeading
+                eyebrow="04 · Stints"
                 title="Stint explorer"
                 tagline="what each fuel run cost"
                 note={
@@ -791,7 +940,7 @@ export default function StintPlanner() {
                         <div className="flex items-baseline gap-2.5">
                           <span
                             className="font-display text-[15px] uppercase tracking-[0.1em]"
-                            style={{ color: seriesColor(run.slot) }}
+                            style={{ color: runColor(run.slot) }}
                           >
                             Run {run.slot + 1}
                           </span>
@@ -907,7 +1056,7 @@ export default function StintPlanner() {
                                                       driver.rawTimeByLap.get(lap) ?? lap.lapTimeMs;
                                                     const byHand =
                                                       excluded?.has(lap.lapNumber) ?? false;
-                                                    const byRule = lapRuleMatches(lap, run.finalLap)
+                                                    const byRule = lapRuleMatches(lap, run.ruleContext)
                                                       .filter((key) => filters[key])
                                                       .map((key) => RULE_SHORT[key]);
                                                     const isIncluded = !byHand && byRule.length === 0;

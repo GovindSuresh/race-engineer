@@ -27,6 +27,30 @@ export function seriesColor(index: number): string {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
+/** Palette indices for the Stint Planner's four run slots.
+ *
+ *  Not simply 0-3: that took orange and yellow for runs 2 and 4, two warm
+ *  neighbours that read as the same colour in a thin chart line. Measured with
+ *  CIEDE2000, orange/yellow is ΔE 21.1 for normal vision but only **4.9**
+ *  simulated for deuteranopia — effectively one colour for the most common
+ *  form of colour blindness.
+ *
+ *  blue/aqua/yellow/red is the best available four from this palette: worst
+ *  pair 31.9 normal (yellow/red), 11.2 deuteranope, 9.6 protanope. That is
+ *  half again the separation of the old set for normal vision and more than
+ *  double for deuteranopia; protanopia gives up a little (13.0 -> 9.6), which
+ *  is the right trade since deuteranopia is the more common deficiency.
+ *
+ *  Run identity follows the SLOT, so this mapping must stay fixed — a run
+ *  keeps its colour when another slot is cleared. */
+const RUN_SLOT_COLOR_INDICES = [0, 2, 3, 7] as const;
+
+/** Colour for Stint Planner run slot 0-3. Use this, not `seriesColor(slot)`,
+ *  for anything identifying a run. */
+export function runColor(slot: number): string {
+  return seriesColor(RUN_SLOT_COLOR_INDICES[slot % RUN_SLOT_COLOR_INDICES.length]);
+}
+
 // Design tokens, mirrored from globals.css. ECharts builds a canvas, not DOM,
 // so it can't read CSS custom properties — these have to be literal values.
 // Keep in sync with globals.css :root.
@@ -47,7 +71,7 @@ export const C = {
   wetBand: "rgba(69,184,232,.10)",
 } as const;
 
-const MONO = "var(--font-plex-mono), ui-monospace, monospace";
+export const MONO = "var(--font-plex-mono), ui-monospace, monospace";
 const DISPLAY = "var(--font-barlow-condensed), sans-serif";
 
 /** Shared axis styling: no ticks, mono labels in muted ink, dashed gridlines.

@@ -104,4 +104,69 @@ describe("deriveStints", () => {
     const laps = [makeLap({ lapNumber: 0, fuelLevel: undefined, fuelUsed: undefined })];
     expect(() => deriveStints(laps)).toThrow(/Garage61 fuel data/);
   });
+
+  // Garage61 doesn't always have every lap — a real Le Mans run was missing the
+  // in-lap for its second stop, leaving only the out-lap. Splitting on pitIn
+  // alone merged two stints into one that looked entirely plausible while its
+  // fuel figures and pace trend spanned a pit stop.
+  it("starts a new stint at a pit-out even when that stop's in-lap is missing", () => {
+    const laps = [
+      makeLap({ lapNumber: 10, pitOut: true, fuelLevel: 97 }),
+      makeLap({ lapNumber: 11, fuelLevel: 94 }),
+      makeLap({ lapNumber: 17, fuelLevel: 60 }),
+      // lap 18, the in-lap, is absent from the data entirely
+      makeLap({ lapNumber: 19, pitOut: true, fuelLevel: 96 }),
+      makeLap({ lapNumber: 20, fuelLevel: 93 }),
+    ];
+    const stints = deriveStints(laps);
+
+    expect(stints).toHaveLength(2);
+    expect(stints[0].startLap).toBe(10);
+    expect(stints[0].endLap).toBe(17);
+    expect(stints[1].startLap).toBe(19);
+    expect(stints[1].endLap).toBe(20);
+  });
+
+  it("numbers stints consecutively when a boundary comes from a pit-out", () => {
+    const laps = [
+      makeLap({ lapNumber: 0, pitOut: true, fuelLevel: 97 }),
+      makeLap({ lapNumber: 1, pitIn: true, fuelLevel: 94 }),
+      makeLap({ lapNumber: 2, pitOut: true, fuelLevel: 96 }),
+      // in-lap missing again
+      makeLap({ lapNumber: 4, pitOut: true, fuelLevel: 95 }),
+    ];
+    const stints = deriveStints(laps);
+
+    expect(stints.map((s) => s.stintNumber)).toEqual([1, 2, 3]);
+  });
+
+  it("does not emit an empty stint for the normal pit-in then pit-out pair", () => {
+    const laps = [
+      makeLap({ lapNumber: 0, fuelLevel: 97 }),
+      makeLap({ lapNumber: 1, pitIn: true, fuelLevel: 94 }),
+      makeLap({ lapNumber: 2, pitOut: true, fuelLevel: 96 }),
+      makeLap({ lapNumber: 3, fuelLevel: 93 }),
+    ];
+    const stints = deriveStints(laps);
+
+    expect(stints).toHaveLength(2);
+    expect(stints.every((stint) => stint.laps.length > 0)).toBe(true);
+    expect(stints[1].startLap).toBe(2);
+  });
+
+  // A single lap that entered and left the box — /ref_data has one at 4917s.
+  // It's the in-lap, not a stint of its own.
+  it("treats a lap flagged both pit-in and pit-out as ending a stint, not opening one", () => {
+    const laps = [
+      makeLap({ lapNumber: 0, fuelLevel: 97 }),
+      makeLap({ lapNumber: 1, pitIn: true, pitOut: true, fuelLevel: 94, lapTimeMs: 4_917_000 }),
+      makeLap({ lapNumber: 2, fuelLevel: 96 }),
+    ];
+    const stints = deriveStints(laps);
+
+    expect(stints).toHaveLength(2);
+    expect(stints[0].endLap).toBe(1);
+    expect(stints[0].laps).toHaveLength(2);
+    expect(stints[1].startLap).toBe(2);
+  });
 });
