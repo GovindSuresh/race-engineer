@@ -61,6 +61,7 @@ export function computeConditionsSummary(laps: LapRecord[]): ConditionsSummary |
 
   const trackTemps = weathers.map((w) => w.trackTempC);
   const airTemps = weathers.map((w) => w.airTempC);
+  const maxWetness = Math.max(...weathers.map((w) => w.trackWetness));
   // Track usage is read from EVERY lap that has one, not just the laps with a
   // usable weather reading — it doesn't travel with the weather sample (real
   // laps carry a usage figure beside blanked-out temps), so gating it on the
@@ -75,8 +76,11 @@ export function computeConditionsSummary(laps: LapRecord[]): ConditionsSummary |
     trackTempAvgC: average(trackTemps),
     airTempMinC: Math.min(...airTemps),
     airTempMaxC: Math.max(...airTemps),
-    airTempAvgC: average(airTemps),
-    maxTrackWetnessPct: Math.max(...weathers.map((w) => w.trackWetness)),
+    maxTrackWetnessPct: maxWetness,
+    // Any reading above the first ordinal state counts. "Mostly dry" is still
+    // not dry, and it's the presence of water that makes a run incomparable
+    // to a dry one, not the amount.
+    wasWet: maxWetness > 0,
     trackUsageMinPct: usages.length > 0 ? Math.min(...usages) : null,
     trackUsageMaxPct: usages.length > 0 ? Math.max(...usages) : null,
     avgWindVelocityMs: average(weathers.map((w) => w.windVelocity)),

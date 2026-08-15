@@ -748,17 +748,26 @@ export interface SmoothedPacePoint {
 export interface ConditionsSummary {
   trackTempMinC: number;
   trackTempMaxC: number;
-  // Means, for comparing one run against another. A range answers "how much
+  // A mean, for comparing one run against another. A range answers "how much
   // did it move during this run"; only a single number answers "was this run
-  // hotter than that one", which is what a side-by-side table is for.
+  // hotter than that one", which is what a side-by-side table is for. Track
+  // temperature has one and air temperature doesn't because only the track is
+  // compared that way — the surface is what the tyre works against.
   trackTempAvgC: number;
   airTempMinC: number;
   airTempMaxC: number;
-  airTempAvgC: number;
   // Highest Garage61 "Track Wetness" reading observed (0 = bone dry) — a
   // max rather than an average since a session that goes from dry to wet
   // partway through should surface as "got wet," not be diluted to "damp."
   maxTrackWetnessPct: number;
+  /** True if the track was wet at ANY point, however briefly.
+   *
+   *  The headline question about wetness is binary — a run with wet laps in
+   *  it isn't comparable to a dry one, and *how* wet matters much less than
+   *  *whether*. Derived here rather than left as a `> 0` test at each call
+   *  site so the threshold has exactly one definition. `maxTrackWetnessPct`
+   *  stays for anything that does want the degree. */
+  wasWet: boolean;
   // Track state (rubber). Min and max rather than one value because nothing
   // guarantees it holds for a whole run — it just happens to in every real
   // session measured, and a run that spans a reset should say so instead of

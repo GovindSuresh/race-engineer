@@ -172,9 +172,12 @@ export function RunComparisonTable({
               {/* Conditions sit after the performance columns, not among
                   them: they're the context you check once a difference shows
                   up, not a result in their own right. */}
+              {/* Air temperature is deliberately not here. It's the weaker
+                  of the two readings — the track surface is what the tyre
+                  works against — and this table is already wide. It stays on
+                  ConditionsSummaryCard for the per-run detail view. */}
               <Th className="border-l border-line2">Track °C</Th>
-              <Th>Air °C</Th>
-              <Th>Wetness</Th>
+              <Th>Wet session</Th>
               <Th>Rubber</Th>
             </tr>
           </thead>
@@ -275,34 +278,19 @@ export function RunComparisonTable({
                         : "No Garage61 weather data on this run's laps."
                     }
                   />
-                  <ValueCell
-                    value={c?.airTempAvgC ?? null}
-                    baseline={baseC?.airTempAvgC ?? null}
-                    isBaseline={isBaseline}
-                    format={degrees}
-                    formatDelta={signedDegrees}
-                    neutral
-                    title={
-                      c
-                        ? `Mean air temperature. Ranged ${c.airTempMinC.toFixed(1)}–${c.airTempMaxC.toFixed(1)}°C over ${c.lapsWithReading} laps.`
-                        : "No Garage61 weather data on this run's laps."
-                    }
-                  />
-                  {/* Wetness is named, not numbered: iRacing's reading is one
-                      of seven states, so "50%" would imply a precision that
-                      isn't in the data. Worst state seen, since a run that
-                      dried out is still a run that had a wet section. */}
+                  {/* Binary, because that's the question this table answers:
+                      a run with any water in it isn't comparable to a dry
+                      one, and the degree matters far less than the fact. The
+                      wettest state it reached is on hover for when it does. */}
                   <Td>
                     {c === null ? (
                       DASH
                     ) : (
                       <Hint
-                        title={`Wettest the track got during this run (Garage61 reading ${c.maxTrackWetnessPct}/100).`}
+                        title={`Wettest the track got during this run: ${trackWetnessLabel(c.maxTrackWetnessPct)} (Garage61 reading ${c.maxTrackWetnessPct}/100).`}
                       >
-                        <span
-                          className={c.maxTrackWetnessPct > 0 ? "text-wet" : "text-muted"}
-                        >
-                          {trackWetnessLabel(c.maxTrackWetnessPct)}
+                        <span className={c.wasWet ? "text-wet" : "text-muted"}>
+                          {c.wasWet ? "Yes" : "No"}
                         </span>
                       </Hint>
                     )}

@@ -29,7 +29,7 @@ export function ConditionsSummaryCard({ conditions }: { conditions: ConditionsSu
           <span className="font-mono text-[11px] tabular-nums text-muted">{s.value}</span>
         </span>
       ))}
-      <Tag tone={conditions.maxTrackWetnessPct > 0 ? "wet" : "neutral"}>{wetLabel}</Tag>
+      <Tag tone={conditions.wasWet ? "wet" : "neutral"}>{wetLabel}</Tag>
     </div>
   );
 }

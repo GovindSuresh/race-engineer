@@ -43,14 +43,31 @@ describe("computeConditionsSummary", () => {
     expect(summary.airTempMaxC).toBe(24);
   });
 
-  it("also reports mean temperatures, which is what compares one run to another", () => {
+  it("also reports a mean track temperature, which is what compares one run to another", () => {
     const laps = [
-      makeLap({ weather: weather({ trackTempC: 20, airTempC: 18 }) }),
-      makeLap({ weather: weather({ trackTempC: 30, airTempC: 22 }) }),
+      makeLap({ weather: weather({ trackTempC: 20 }) }),
+      makeLap({ weather: weather({ trackTempC: 30 }) }),
     ];
-    const summary = computeConditionsSummary(laps)!;
-    expect(summary.trackTempAvgC).toBe(25);
-    expect(summary.airTempAvgC).toBe(20);
+    expect(computeConditionsSummary(laps)!.trackTempAvgC).toBe(25);
+  });
+
+  it("flags a session as wet if it was wet at any point, however briefly", () => {
+    const dry = [makeLap(), makeLap()];
+    expect(computeConditionsSummary(dry)!.wasWet).toBe(false);
+
+    // One lap out of two, at the mildest state above dry — still a wet run.
+    const damp = [makeLap(), makeLap({ weather: weather({ trackWetness: 17 }) })];
+    const summary = computeConditionsSummary(damp)!;
+    expect(summary.wasWet).toBe(true);
+    expect(summary.maxTrackWetnessPct).toBe(17);
+  });
+
+  it("does not read the not-recorded sentinel as a wet session", () => {
+    const laps = [
+      makeLap(),
+      makeLap({ weather: weather({ trackTempC: 0, airTempC: 0, trackWetness: -1 }) }),
+    ];
+    expect(computeConditionsSummary(laps)!.wasWet).toBe(false);
   });
 
   it("takes the MAX track wetness, not an average, so a session that gets wet doesn't read as merely damp", () => {
