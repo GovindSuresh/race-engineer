@@ -42,24 +42,32 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
   const option = useMemo<EChartsOption>(() => {
     const seriesByLabel = new Map(series.map((s) => [s.label, s]));
 
-    // Fastest lap per series, and the best of those. Computed here rather than
-    // passed in so the markers always describe the data the chart is actually
-    // showing — including after a filter change.
-    const fastest = new Map<string, { lapNumber: number; seconds: number }>();
+    // Best counted lap of each STINT, per series. Derived here from the points
+    // the chart is actually plotting rather than passed in, so the markers
+    // always agree with the line — a lap dropped by a filter is not in `data`,
+    // so it can never be marked as a stint's best.
+    //
+    // Laps with no stint (a series that supplied no `stintByLap`) fall into a
+    // single group, which degrades to one marker for the whole line rather
+    // than to none.
+    const stintBests = new Map<string, { lapNumber: number; seconds: number }[]>();
     for (const s of series) {
-      let best: { lapNumber: number; seconds: number } | null = null;
+      const bestByStint = new Map<number, { lapNumber: number; seconds: number }>();
       for (const row of data) {
         const value = row[s.key];
-        if (typeof value === "number" && (best === null || value < best.seconds)) {
-          best = { lapNumber: row.lapNumber, seconds: value };
+        if (typeof value !== "number") continue;
+        const stint = s.stintByLap?.[row.lapNumber] ?? -1;
+        const current = bestByStint.get(stint);
+        if (!current || value < current.seconds) {
+          bestByStint.set(stint, { lapNumber: row.lapNumber, seconds: value });
         }
       }
-      if (best) fastest.set(s.key, best);
+      if (bestByStint.size > 0) stintBests.set(s.key, [...bestByStint.values()]);
     }
-    const overallBest = [...fastest.values()].reduce(
-      (min, entry) => Math.min(min, entry.seconds),
-      Infinity,
-    );
+
+    const overallBest = [...stintBests.values()]
+      .flat()
+      .reduce((min, entry) => Math.min(min, entry.seconds), Infinity);
     const hasBest = Number.isFinite(overallBest);
 
     return {
@@ -97,7 +105,7 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
       },
       dataZoom: dataZoom(1),
       series: series.map((s, seriesIndex) => {
-        const best = fastest.get(s.key);
+        const bests = stintBests.get(s.key);
 
         return {
           name: s.label,
@@ -112,26 +120,32 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
           itemStyle: { color: runColor(s.slot) },
           data: data.map((row) => [row.lapNumber, row[s.key]] as [number, number | null]),
 
-          // A diamond on each run's own fastest lap. Unlabelled on purpose:
-          // with four runs, four permanent time labels collide with each other
-          // and with the line itself — the tooltip already gives the number.
-          markPoint: best
+          // A diamond on each stint's best counted lap, so a run reads as the
+          // sequence of stints it was rather than as one line with a single
+          // high point. Unlabelled on purpose: four runs' worth of permanent
+          // time labels collide with each other and with the lines, and the
+          // axis tooltip already names the lap, its stint and its time.
+          markPoint: bests
             ? {
                 symbol: "diamond",
-                symbolSize: 9,
+                symbolSize: 8,
                 itemStyle: {
                   color: runColor(s.slot),
                   borderColor: C.panel,
                   borderWidth: 1.5,
                 },
                 label: { show: false },
-                data: [
-                  {
-                    name: `${s.label} fastest`,
+                data: bests.map((best) => {
+                  const stint = s.stintByLap?.[best.lapNumber];
+                  return {
+                    name:
+                      stint === undefined
+                        ? `${s.label} best`
+                        : `${s.label} stint ${stint} best`,
                     coord: [best.lapNumber, best.seconds],
                     value: best.seconds,
-                  },
-                ],
+                  };
+                }),
               }
             : undefined,
 

@@ -860,10 +860,11 @@ export default function StintPlanner() {
                     Dropped laps are left out of the line entirely rather than plotted as a
                     spike, so the y-axis stays scaled to real running pace — a gap in a line
                     is a dropped lap. A <b className="text-muted">diamond</b> marks each
-                    run’s own fastest lap and the dashed amber line is the best lap of any
-                    run. Hover any lap to see which <b className="text-muted">stint</b> it
-                    belongs to, per run — stints aren’t drawn on the chart itself because
-                    every run has its own boundaries on this shared lap axis.
+                    stint’s best counted lap, so you can read a run as the sequence of
+                    stints it was; the dashed amber line is the best lap of any run. Hover
+                    any lap to see which <b className="text-muted">stint</b> it belongs to,
+                    per run — stint boundaries aren’t drawn on the chart itself because
+                    every run has its own on this shared lap axis.
                   </>
                 }
               />
