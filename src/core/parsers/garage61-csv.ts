@@ -72,6 +72,17 @@ function toNullableNumber(value: string): number | null {
   return value === "" ? null : Number(value);
 }
 
+/** For readings where a negative is the export's "not recorded" marker rather
+ *  than a value — see `RawGarage61Row.trackUsagePct`. Kept separate from
+ *  `toNullableNumber` because most nullable columns (the sectors) are simply
+ *  blank when absent, and a negative sector time would be a bug worth seeing
+ *  rather than quietly nulling. */
+function toNullableNonNegative(value: string): number | null {
+  if (value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function toBool01(value: string): boolean {
   return value === "1";
 }
@@ -108,7 +119,7 @@ export function parseGarage61Csv(csvText: string): RawGarage61Row[] {
       pitIn: toBool01(get(fields, "Pit in")),
       pitOut: toBool01(get(fields, "Pit out")),
       trackTempC: toNumber(get(fields, "Track temp")),
-      trackUsagePct: toNumber(get(fields, "Track usage")),
+      trackUsagePct: toNullableNonNegative(get(fields, "Track usage")),
       airTempC: toNumber(get(fields, "Air temperature")),
       cloudCover: toNumber(get(fields, "Cloud cover")),
       airDensity: toNumber(get(fields, "Air density")),

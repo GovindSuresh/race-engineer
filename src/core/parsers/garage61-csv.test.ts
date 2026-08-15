@@ -53,4 +53,28 @@ describe("parseGarage61Csv", () => {
     const badCsv = "Run,Lap,Driver\n1,0,Test Driver";
     expect(() => parseGarage61Csv(badCsv)).toThrow(/missing expected column/);
   });
+
+  it("parses a real track usage, including a legitimate 0", () => {
+    const [firstRow] = parseGarage61Csv(fixtureCsv);
+    expect(firstRow.trackUsagePct).toBe(71);
+    expect(parseGarage61Csv(withTrackUsage("0"))[0].trackUsagePct).toBe(0);
+  });
+
+  // 0 means a green, unrubbered track — a real and consequential reading — so
+  // a blank cell must not collapse onto it the way `Number("")` would.
+  it("parses a blank or negative track usage as null rather than 0", () => {
+    expect(parseGarage61Csv(withTrackUsage(""))[0].trackUsagePct).toBeNull();
+    expect(parseGarage61Csv(withTrackUsage("-1"))[0].trackUsagePct).toBeNull();
+  });
 });
+
+/** The fixture's header plus its first data row, with the "Track usage" cell
+ *  replaced. Rewriting the cell by header position rather than hand-writing a
+ *  28-column CSV keeps this honest about the real column order. */
+function withTrackUsage(value: string): string {
+  const [header, firstDataRow] = fixtureCsv.split("\n");
+  const column = header.split(",").indexOf("Track usage");
+  const cells = firstDataRow.split(",");
+  cells[column] = value;
+  return `${header}\n${cells.join(",")}`;
+}

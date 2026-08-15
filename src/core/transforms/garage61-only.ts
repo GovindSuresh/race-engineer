@@ -29,6 +29,7 @@ export function garage61OnlyToLapRecords(
       trackTempC: row.trackTempC,
       airTempC: row.airTempC,
       trackWetness: row.trackWetness,
+      trackUsagePct: row.trackUsagePct,
       precipitation: row.precipitation,
       windVelocity: row.windVelocity,
     },

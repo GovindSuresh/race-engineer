@@ -133,6 +133,16 @@ describe("garage61ApiLapToRow", () => {
     expect(row.trackUsagePct).toBe(55);
   });
 
+  // The exception to the "absent means 0" rule below: 0 is a REAL track-usage
+  // reading (a green, unrubbered track), so falling back to it would state a
+  // consequential track state that was never measured. Garage61 marks an
+  // unrecorded reading with a negative, exactly as it does for trackWetness.
+  it("maps an absent or negative track usage to null, not 0", () => {
+    expect(garage61ApiLapToRow({ lapNumber: 4 }).trackUsagePct).toBeNull();
+    expect(garage61ApiLapToRow({ lapNumber: 4, trackUsage: -1 }).trackUsagePct).toBeNull();
+    expect(garage61ApiLapToRow({ lapNumber: 4, trackUsage: 0 }).trackUsagePct).toBe(0);
+  });
+
   // Garage61's API is a Go service, and Go's `omitempty` drops zero numbers
   // and `false` booleans from the JSON entirely — so absence is the normal
   // encoding of "0 litres" / "not a pit lap", not an error to reject.

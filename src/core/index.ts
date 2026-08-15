@@ -65,7 +65,11 @@ export type { TeamOption } from "./transforms/race-summary";
 export { computeRaceKpis } from "./transforms/race-kpis";
 export { computeFieldPace, computeOurPaceVsField } from "./transforms/field-pace";
 export { computePositionStints } from "./transforms/position-stints";
-export { computeConditionsSummary } from "./transforms/conditions";
+export {
+  computeConditionsSummary,
+  hasWeatherReading,
+  trackWetnessLabel,
+} from "./transforms/conditions";
 export { computeSmoothedPace } from "./transforms/smooth";
 export {
   isEventResultExport,

@@ -115,6 +115,35 @@ describe("computeRunComparison", () => {
     // (3+3+3+5)/4 = 3.5, not the (3+5)/2 = 4 an average-of-averages would give.
     expect(run.fuelPerLap).toBeCloseTo(3.5, 5);
   });
+
+  it("summarises the conditions the run was set in", () => {
+    const withWeather = (lapNumber: number, trackTempC: number): LapRecord => ({
+      ...lap(lapNumber, 100_000),
+      weather: {
+        trackTempC,
+        airTempC: 20,
+        trackWetness: 0,
+        trackUsagePct: 71,
+        precipitation: 0,
+        windVelocity: 3,
+      },
+    });
+
+    const [run] = computeRunComparison([
+      { slot: 0, label: "Run 1", stints: [stint(1, [withWeather(1, 28), withWeather(2, 32)])] },
+    ]);
+
+    expect(run.conditions?.trackTempAvgC).toBe(30);
+    expect(run.conditions?.trackUsageMaxPct).toBe(71);
+  });
+
+  it("reports null conditions for a run with no weather data, rather than zeroes", () => {
+    const [run] = computeRunComparison([
+      { slot: 0, label: "Run 1", stints: [stint(1, [lap(1, 100_000), lap(2, 100_000)])] },
+    ]);
+
+    expect(run.conditions).toBeNull();
+  });
 });
 
 describe("computeRunLapDistributions", () => {

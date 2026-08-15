@@ -1,21 +1,22 @@
-import type { ConditionsSummary } from "@/core";
+import { trackWetnessLabel, type ConditionsSummary } from "@/core";
 import { Tag } from "@/components/Controls";
-
-function wetness(maxTrackWetnessPct: number): { label: string; tone: "neutral" | "wet" } {
-  if (maxTrackWetnessPct === 0) return { label: "Dry", tone: "neutral" };
-  if (maxTrackWetnessPct < 30) return { label: "Damp", tone: "wet" };
-  return { label: "Wet", tone: "wet" };
-}
+import { formatTrackUsage } from "@/lib/format";
 
 /** Presentational-only conditions readout, built from Garage61's real
  *  per-lap weather columns — not a stand-in for track/car metadata, which
  *  Garage61 exports simply don't carry. */
 export function ConditionsSummaryCard({ conditions }: { conditions: ConditionsSummary }) {
-  const wet = wetness(conditions.maxTrackWetnessPct);
+  // Named by the same function the comparison table uses, so one run can't be
+  // "Damp" here and "Mostly dry" three panels up.
+  const wetLabel = trackWetnessLabel(conditions.maxTrackWetnessPct);
   const stats = [
     { label: "Track", value: `${conditions.trackTempMinC.toFixed(1)}–${conditions.trackTempMaxC.toFixed(1)}°C` },
     { label: "Air", value: `${conditions.airTempMinC.toFixed(1)}–${conditions.airTempMaxC.toFixed(1)}°C` },
     { label: "Wind", value: `${conditions.avgWindVelocityMs.toFixed(1)} m/s` },
+    {
+      label: "Rubber",
+      value: formatTrackUsage(conditions.trackUsageMinPct, conditions.trackUsageMaxPct),
+    },
   ];
 
   return (
@@ -28,7 +29,7 @@ export function ConditionsSummaryCard({ conditions }: { conditions: ConditionsSu
           <span className="font-mono text-[11px] tabular-nums text-muted">{s.value}</span>
         </span>
       ))}
-      <Tag tone={wet.tone}>{wet.label}</Tag>
+      <Tag tone={conditions.maxTrackWetnessPct > 0 ? "wet" : "neutral"}>{wetLabel}</Tag>
     </div>
   );
 }

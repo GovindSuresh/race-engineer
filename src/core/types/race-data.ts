@@ -241,7 +241,11 @@ export interface RawGarage61Row {
   pitIn: boolean;
   pitOut: boolean;
   trackTempC: number;
-  trackUsagePct: number;
+  /** Null when the export didn't record one — an empty CSV cell, or the
+   *  API's negative sentinel. NOT 0: a 0 here is a real reading meaning a
+   *  green, unrubbered track, so coercing an absent value to it would state
+   *  a specific and consequential track state that was never measured. */
+  trackUsagePct: number | null;
   airTempC: number;
   cloudCover: number;
   airDensity: number;
@@ -392,7 +396,27 @@ export interface RawGarage61ApiList<T> {
 export interface WeatherSnapshot {
   trackTempC: number;
   airTempC: number;
+  /** Garage61's "Track Wetness", 0-100. NOT a continuous percentage: iRacing
+   *  reports wetness as one of seven ordinal states and Garage61 rescales
+   *  them onto 0-100, so real readings land on multiples of 100/6 (verified —
+   *  461 real laps at Spa contained only 0, 17, 33 and 50). Use
+   *  `trackWetnessLabel()` to name a value rather than showing the number,
+   *  which reads as a precision that isn't there.
+   *
+   *  **A negative value means "not recorded"**, not "drier than dry" — see
+   *  `hasWeatherReading`. */
   trackWetness: number;
+  /** How rubbered-in the surface was, 0-100 — iRacing's session "track state"
+   *  as Garage61 exports it. Constant across every lap of a session in all
+   *  real data seen so far, which is what makes it comparable BETWEEN runs:
+   *  a green track and a rubbered-in one are not the same test.
+   *
+   *  Null means not recorded, and is deliberately distinct from 0 (a green
+   *  track). Unlike the temperatures and wetness above, this survives a lap
+   *  whose weather block is blank — real laps carry a usage figure with
+   *  `trackWetness: -1` and zeroed temps beside it, so it appears to be
+   *  session metadata rather than part of the per-lap weather sample. */
+  trackUsagePct: number | null;
   precipitation: number;
   windVelocity: number;
 }
@@ -724,13 +748,30 @@ export interface SmoothedPacePoint {
 export interface ConditionsSummary {
   trackTempMinC: number;
   trackTempMaxC: number;
+  // Means, for comparing one run against another. A range answers "how much
+  // did it move during this run"; only a single number answers "was this run
+  // hotter than that one", which is what a side-by-side table is for.
+  trackTempAvgC: number;
   airTempMinC: number;
   airTempMaxC: number;
+  airTempAvgC: number;
   // Highest Garage61 "Track Wetness" reading observed (0 = bone dry) — a
   // max rather than an average since a session that goes from dry to wet
   // partway through should surface as "got wet," not be diluted to "damp."
   maxTrackWetnessPct: number;
+  // Track state (rubber). Min and max rather than one value because nothing
+  // guarantees it holds for a whole run — it just happens to in every real
+  // session measured, and a run that spans a reset should say so instead of
+  // silently reporting one end of it. Null (both, together) when no lap
+  // recorded one, which is NOT the same as a green track reading 0.
+  trackUsageMinPct: number | null;
+  trackUsageMaxPct: number | null;
   avgWindVelocityMs: number;
+  /** How many of the supplied laps actually carried a weather reading. Laps
+   *  Garage61 recorded without one are excluded from every figure above (see
+   *  `hasWeatherReading`), so this is what says whether a summary rests on
+   *  the whole run or on three laps of it. */
+  lapsWithReading: number;
 }
 
 /** Headline, at-a-glance numbers for our team's race — the KPI strip at the

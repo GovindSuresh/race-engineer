@@ -60,6 +60,7 @@ describe("mergeGarage61IntoIracing", () => {
       trackTempC: 20,
       airTempC: 19,
       trackWetness: 10,
+      trackUsagePct: 50,
       precipitation: 0,
       windVelocity: 5,
     });
