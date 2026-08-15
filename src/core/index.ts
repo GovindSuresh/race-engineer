@@ -50,6 +50,16 @@ export { deriveStints } from "./transforms/stints";
 export { computeStintPaceTrend } from "./transforms/stint-pace-trend";
 export { computeDriverPaceStats } from "./transforms/pace";
 export { computeFuelBurnRate, computeAverageFuelBurnRate } from "./transforms/fuel";
+
+export {
+  computeRunComparison,
+  computeRunLapDistributions,
+} from "./transforms/run-comparison";
+export type {
+  RunComparison,
+  RunComparisonInput,
+  RunLapDistribution,
+} from "./transforms/run-comparison";
 export { buildRaceSummary, listTeams } from "./transforms/race-summary";
 export type { TeamOption } from "./transforms/race-summary";
 export { computeRaceKpis } from "./transforms/race-kpis";

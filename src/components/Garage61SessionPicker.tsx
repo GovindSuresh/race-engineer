@@ -30,6 +30,20 @@ const AGE_OPTIONS = [
   { value: 365, label: "Last year" },
 ];
 
+/** Sentinel for the Drivers select. Not a real slug — Garage61's own keyword
+ *  for "just me" is `me`, and a `@` prefix can't collide with a slug. */
+const JUST_ME = "@me";
+
+/** How many sessions to show before asking, and how many more each click
+ *  adds. A track with a season of practice on it reconstructs into 80+
+ *  sessions, which buries the rest of the page; 20 fills the list without
+ *  taking over. */
+const PAGE_SIZE = 20;
+
+/** Roughly ten rows of table before it starts scrolling internally. Keeps the
+ *  picker to about half a screen no matter how many sessions came back. */
+const LIST_MAX_HEIGHT = 420;
+
 function formatSessionDate(iso: string): string {
   const parsed = Date.parse(iso);
   if (!Number.isFinite(parsed)) return "—";
@@ -59,8 +73,12 @@ export function Garage61SessionPicker({
 }: Garage61SessionPickerProps) {
   const [trackId, setTrackId] = useState<string>("");
   const [carId, setCarId] = useState<string>("");
-  const [teamSlug, setTeamSlug] = useState<string>("");
+  const [driversValue, setDriversValue] = useState<string>("");
   const [ageDays, setAgeDays] = useState<string>("30");
+  /** Reset by the search button rather than by an effect watching `sessions`:
+   *  the search is the only thing that replaces the list, and setting state
+   *  from an effect body cascades an extra render. */
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   if (referenceError) {
     return <p className="font-mono text-xs text-danger">{referenceError}</p>;
@@ -71,6 +89,11 @@ export function Garage61SessionPicker({
   }
 
   const canSearch = trackId !== "" && !progress.loading;
+
+  // Sessions arrive newest first from `groupG61ApiLapsIntoSessions`, so the
+  // first page is the recent practice you're most likely to want.
+  const visibleSessions = sessions.slice(0, visibleCount);
+  const hasMoreToShow = sessions.length > visibleSessions.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -104,21 +127,20 @@ export function Garage61SessionPicker({
           </Select>
         </label>
 
-        {reference.teams.length > 0 && (
-          <label className="flex flex-col gap-1.5">
-            <span className="font-display text-[13px] uppercase tracking-[0.1em] text-muted">
-              Drivers
-            </span>
-            <Select value={teamSlug} onChange={setTeamSlug} ariaLabel="Drivers">
-              <option value="">You and your teammates</option>
-              {reference.teams.map((team) => (
-                <option key={team.slug} value={team.slug}>
-                  {team.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        )}
+        <label className="flex flex-col gap-1.5">
+          <span className="font-display text-[13px] uppercase tracking-[0.1em] text-muted">
+            Drivers
+          </span>
+          <Select value={driversValue} onChange={setDriversValue} ariaLabel="Drivers">
+            <option value="">You and your teammates</option>
+            <option value={JUST_ME}>Just you</option>
+            {reference.teams.map((team) => (
+              <option key={team.slug} value={team.slug}>
+                {team.name}
+              </option>
+            ))}
+          </Select>
+        </label>
 
         <label className="flex flex-col gap-1.5">
           <span className="font-display text-[13px] uppercase tracking-[0.1em] text-muted">
@@ -136,14 +158,17 @@ export function Garage61SessionPicker({
         <button
           type="button"
           disabled={!canSearch}
-          onClick={() =>
+          onClick={() => {
+            setVisibleCount(PAGE_SIZE);
             onSearch({
               trackId: Number(trackId),
               carId: carId === "" ? null : Number(carId),
-              teamSlug: teamSlug === "" ? null : teamSlug,
+              teamSlug:
+                driversValue === "" || driversValue === JUST_ME ? null : driversValue,
+              onlyMe: driversValue === JUST_ME,
               ageDays: Number(ageDays),
-            })
-          }
+            });
+          }}
           className={`rounded-sm border px-3 py-1 font-display text-[13px] uppercase tracking-[0.06em] transition-colors ${
             canSearch
               ? "border-line2 bg-panel2 text-text hover:border-amber hover:text-amber"
@@ -172,7 +197,7 @@ export function Garage61SessionPicker({
       )}
 
       {sessions.length > 0 && (
-        <TableWrap>
+        <TableWrap maxHeight={LIST_MAX_HEIGHT}>
           <Table>
             <thead>
               <tr>
@@ -185,7 +210,7 @@ export function Garage61SessionPicker({
               </tr>
             </thead>
             <tbody>
-              {sessions.map((session) => (
+              {visibleSessions.map((session) => (
                 <Tr key={session.key}>
                   <Td align="left">
                     <span className="text-text">{formatSessionDate(session.startedAt)}</span>
@@ -233,6 +258,33 @@ export function Garage61SessionPicker({
             </tbody>
           </Table>
         </TableWrap>
+      )}
+
+      {sessions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-mono text-[11px] text-faint">
+            Showing {visibleSessions.length} of {sessions.length}
+            {sessions.length === 1 ? " session" : " sessions"}, newest first
+          </span>
+          {hasMoreToShow && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              className="rounded-sm border border-line px-2.5 py-0.5 font-display text-[11px] uppercase tracking-[0.06em] text-muted transition-colors hover:border-line2 hover:text-text"
+            >
+              Show {Math.min(PAGE_SIZE, sessions.length - visibleSessions.length)} more
+            </button>
+          )}
+          {hasMoreToShow && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount(sessions.length)}
+              className="font-mono text-[11px] text-faint underline-offset-2 transition-colors hover:text-muted hover:underline"
+            >
+              show all {sessions.length}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

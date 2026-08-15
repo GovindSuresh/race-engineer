@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
-import { BarChart, CustomChart, LineChart, ScatterChart } from "echarts/charts";
+import { BarChart, BoxplotChart, CustomChart, LineChart, ScatterChart } from "echarts/charts";
 import {
   DataZoomComponent,
   GridComponent,
   LegendComponent,
   MarkAreaComponent,
   MarkLineComponent,
+  MarkPointComponent,
   TooltipComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
@@ -22,6 +23,7 @@ echarts.use([
   LineChart,
   ScatterChart,
   BarChart,
+  BoxplotChart,
   CustomChart,
   GridComponent,
   TooltipComponent,
@@ -29,6 +31,7 @@ echarts.use([
   DataZoomComponent,
   MarkAreaComponent,
   MarkLineComponent,
+  MarkPointComponent,
   CanvasRenderer,
 ]);
 
