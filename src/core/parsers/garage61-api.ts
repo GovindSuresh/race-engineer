@@ -36,11 +36,29 @@ function bool(value: unknown): boolean {
   return value === true;
 }
 
-/** Garage61's `driver` is `{slug, firstName, lastName}`, but the CSV export's
- *  `Driver` column — and therefore `LapRecord.driverName`, which the whole
- *  planner groups and keys on — is a single display name. Compose the same
- *  thing, falling back through the identifiers that are always present so a
- *  lap can never end up under an empty driver name. */
+/** Garage61's `driver` is `{id, slug, firstName, lastName}`, but the CSV
+ *  export's `Driver` column — and therefore `LapRecord.driverName`, which the
+ *  whole planner groups and keys on — is a single display name.
+ *
+ *  KNOWN DIVERGENCE, verified against the live API. A driver can rename
+ *  themselves on Garage61, and the CSV exports that **display name**, which no
+ *  API endpoint returns: `/laps` gives first/last name only, `/me` has a
+ *  `nickName` that is a third distinct value, and `/teams/{id}` repeats
+ *  first/last. The slug is derived from the display name ("G man" -> `g-man`),
+ *  so it is the only shared identity, but the original casing is gone.
+ *
+ *  iRacing is the authoritative name; the Garage61 display name is the one
+ *  that drifts. Real example: iRacing "James Paisley-Knight" vs Garage61
+ *  "James Knight". That drift is why `mergeGarage61IntoIracing` matches only
+ *  some drivers — it keys on (driverName, lapNumber).
+ *
+ *  Composing first+last is therefore not just prettier than the slug, it is
+ *  the value most likely to equal iRacing's `display_name`. For an exact join
+ *  there is a better option this doesn't use: `/teams/{id}` exposes each
+ *  member's linked `accounts[].id`, which is the iRacing `cust_id`.
+ *
+ *  Fall back through the identifiers that are always present so a lap can
+ *  never end up under an empty driver name. */
 export function garage61ApiDriverName(driver: RawGarage61Lap["driver"]): string {
   if (!driver) return "Unknown driver";
   const full = [driver.firstName, driver.lastName]
@@ -50,44 +68,30 @@ export function garage61ApiDriverName(driver: RawGarage61Lap["driver"]): string 
   return full || driver.nickName?.trim() || driver.slug?.trim() || "Unknown driver";
 }
 
-/** Pulls the time out of one `sectors` entry. The docs describe the array
- *  only as `array<object>`, so try the plausible key names in turn. */
-function sectorTime(sector: RawGarage61ApiSector): number | null {
-  for (const value of [sector.time, sector.lapTime, sector.duration]) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
-/** Normalises the undocumented `sectors` array into the CSV's fixed four
- *  slots.
+/** Normalises the `sectors` array into the CSV's fixed four slots.
  *
- *  Two shapes are handled: entries that carry their own sector index
- *  (`number`/`sector`), which are placed by that index, and entries that
- *  don't, which are taken in array order. When indices are present the base is
- *  inferred from the smallest one, because nothing documents whether Garage61
- *  counts sectors from 0 or 1 — a track whose first entry is `0` is read as
- *  0-based, otherwise 1-based.
+ *  Shape verified against the live API: `[{ sectorTime, incomplete }, …]` with
+ *  no index field, so **position is the sector number**. The array is 3 or 4
+ *  long depending on the lap; anything past the fourth is dropped to match the
+ *  CSV's four columns, and missing trailing sectors stay null.
  *
- *  A wrong guess here is inert: `LapRecord.sectorTimes` is written by the
- *  transforms and read by nothing, so this costs a follow-up commit at worst.
- *  Sectors beyond the fourth are dropped, matching the CSV's four columns. */
+ *  An `incomplete` sector reports `sectorTime: 0`, which is not a 0.0s
+ *  sector — it means the sector was never timed (an out-lap that joined
+ *  part-way round, say). It maps to `null`, which is exactly what the CSV
+ *  export writes for the same lap: an empty cell. That correspondence is what
+ *  lets the two paths produce identical `LapRecord`s. */
 export function garage61ApiSectorsToColumns(
   sectors: RawGarage61ApiSector[] | undefined,
 ): [number | null, number | null, number | null, number | null] {
   const columns: (number | null)[] = [null, null, null, null];
-  if (!Array.isArray(sectors) || sectors.length === 0) {
+  if (!Array.isArray(sectors)) {
     return columns as [number | null, number | null, number | null, number | null];
   }
 
-  const indices = sectors.map((s) => (typeof s?.number === "number" ? s.number : s?.sector));
-  const indexed = indices.every((i) => typeof i === "number" && Number.isFinite(i));
-  const base = indexed ? Math.min(...(indices as number[])) : 0;
-
-  sectors.forEach((sector, i) => {
-    if (!sector) return;
-    const slot = indexed ? (indices[i] as number) - base : i;
-    if (slot >= 0 && slot < 4) columns[slot] = sectorTime(sector);
+  sectors.slice(0, 4).forEach((sector, i) => {
+    if (!sector || sector.incomplete === true) return;
+    const time = sector.sectorTime;
+    if (typeof time === "number" && Number.isFinite(time)) columns[i] = time;
   });
 
   return columns as [number | null, number | null, number | null, number | null];
@@ -99,10 +103,11 @@ export function garage61ApiSectorsToColumns(
  *  path are the same code — `garage61OnlyToLapRecords` turns either into
  *  `LapRecord[]`, and every transform, chart and table downstream is shared.
  *
- *  Absent fields become 0/false rather than errors. Garage61's API is a Go
- *  service and Go's `omitempty` drops zero numbers and `false` booleans from
- *  the payload, so "no `fuelAdded` key" means "no fuel added", not "unknown".
- *  See the note on `RawGarage61Lap`. */
+ *  Absent fields become 0/false rather than errors. In practice the live API
+ *  omits none of them (measured over 1000 laps), but defaulting costs nothing
+ *  and `deriveStints` throws outright on an undefined `fuelLevel`/`fuelUsed`,
+ *  so this is the difference between a missing field and a crash. See the note
+ *  on `RawGarage61Lap`. */
 export function garage61ApiLapToRow(lap: RawGarage61Lap): RawGarage61Row {
   const [sector1, sector2, sector3, sector4] = garage61ApiSectorsToColumns(lap.sectors);
 
@@ -158,9 +163,11 @@ export function sortGarage61ApiLaps(laps: RawGarage61Lap[]): RawGarage61Lap[] {
   });
 }
 
-/** Reads the `{ items: [...] }` envelope every Garage61 list endpoint returns.
- *  Tolerates a bare array too, so a hand-captured fixture of just the laps
- *  works without being re-wrapped. Non-object entries are dropped. */
+/** Reads the `{ items: [...] }` envelope `/laps` returns, or a bare array.
+ *  Both are needed: Garage61's list endpoints disagree with each other —
+ *  `/laps` wraps, while `/tracks`, `/cars` and `/teams` return bare arrays
+ *  (verified against the live API) — and a hand-captured fixture of just the
+ *  laps works without being re-wrapped. Non-object entries are dropped. */
 export function parseGarage61ApiLaps(payload: unknown): RawGarage61Lap[] {
   const items = Array.isArray(payload)
     ? payload

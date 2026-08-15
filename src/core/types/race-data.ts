@@ -270,25 +270,34 @@ export interface RawGarage61Row {
 // `garage61ApiLapToRow` narrows it back to `RawGarage61Row` and everything
 // downstream (garage61OnlyToLapRecords → deriveStints → the UI) is shared.
 //
-// EVERY field is optional here, deliberately, even though the published docs
-// list most of them as always present. Garage61's API is a Go service (its
-// 404s are net/http's plain-text "404 page not found"), and Go's standard
-// `json:",omitempty"` drops zero numbers, empty strings and `false` booleans
-// from the payload entirely. So an absent `fuelAdded` almost certainly means
-// 0 litres, and an absent `pitIn` means false — the parser applies those
-// defaults rather than treating absence as an error. Confirm against a live
-// response once a token is available; see the plan's sequencing note.
+// EVERY field is optional here, deliberately, and absence is read as 0/false
+// rather than as an error — see `garage61ApiLapToRow`.
+//
+// The original reason was an inference that proved WRONG, and it's recorded
+// here so nobody re-derives it: Garage61's API is a Go service (its 404s are
+// net/http's plain-text "404 page not found"), so Go's `json:",omitempty"`
+// looked certain to drop zero numbers and `false` booleans. Measured against
+// the live API it does not — across 1000 laps, `pitIn: false`, `windDir: 0`
+// and `powerAdjust: 0` were all present, and every load-bearing field
+// (lapTime, lapNumber, startTime, run, event, session, clean, pitIn, pitOut,
+// fuelLevel, fuelUsed, fuelAdded, driver, car, track) appeared on all 1000.
+//
+// The optionality stays anyway. It costs one `?? 0` per field and it is what
+// keeps a future endpoint, an older lap, or a non-iRacing platform from
+// throwing; the measurement above is one track and one account, which is
+// evidence about this data, not a guarantee about all of it.
 
-/** One entry of the `sectors` array. Documented only as `array<object>`, so
- *  this covers the plausible shapes and the parser tolerates all of them.
- *  Nothing reads `LapRecord.sectorTimes` today, so a wrong guess here is
- *  inert — it costs a follow-up commit, not a broken feature. */
+/** One entry of the `sectors` array.
+ *
+ *  The docs say only `array<object>`; this is the shape **verified against the
+ *  live API** (1000 laps, Spa Endurance — every element had exactly these two
+ *  keys). Entries carry no sector index, so position in the array is the
+ *  sector number, and the array is 3 or 4 long depending on the lap. */
 export interface RawGarage61ApiSector {
-  number?: number;
-  sector?: number;
-  time?: number;
-  lapTime?: number;
-  duration?: number;
+  /** Sector duration in seconds. `0` when the sector wasn't timed — always
+   *  check `incomplete` first, or an untimed sector reads as a 0.0s one. */
+  sectorTime?: number;
+  incomplete?: boolean;
 }
 
 export interface RawGarage61ApiDriver {

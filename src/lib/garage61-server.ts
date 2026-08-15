@@ -116,6 +116,20 @@ export async function garage61Get<T>(
   }
 }
 
+/** Garage61's list endpoints are not consistently shaped, so never assume.
+ *
+ *  Verified against the live API: `/laps` returns a `{ items: [...] }`
+ *  envelope, but `/tracks`, `/cars` and `/teams` return a **bare array**.
+ *  Reading `.items` off the latter yields `undefined` and, with the obvious
+ *  `?? []` fallback, an empty list rather than an error — which presents as
+ *  dropdowns that are simply empty, with nothing in any log to explain why.
+ *  Accept either shape. */
+export function garage61List<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  const items = (payload as { items?: unknown } | null)?.items;
+  return Array.isArray(items) ? (items as T[]) : [];
+}
+
 /** Turns any thrown error into the JSON envelope the client hook expects.
  *  Deliberately does not include the upstream body or the token. */
 export function garage61ErrorResponse(error: unknown): Response {

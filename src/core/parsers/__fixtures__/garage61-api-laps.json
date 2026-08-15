@@ -1,0 +1,602 @@
+{
+  "items": [
+    {
+      "id": "LAP002",
+      "driver": {
+        "id": "DRV001",
+        "slug": "ada-vance",
+        "firstName": "Ada",
+        "lastName": "Vance"
+      },
+      "driverRating": 1760,
+      "event": "EVT003",
+      "eventType": 1,
+      "session": 0,
+      "sessionType": 1,
+      "run": 0,
+      "season": {
+        "id": 33,
+        "name": "2026 Season 2",
+        "shortName": "2026S2",
+        "start": "2026-03-17T00:00:00Z",
+        "end": "2026-06-16T00:00:00Z"
+      },
+      "car": {
+        "id": 29,
+        "name": "Dallara P217",
+        "platform": "iracing",
+        "platform_id": "128"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-05-05T08:43:04Z",
+      "lapNumber": 2,
+      "lapTime": 131.0697021484375,
+      "clean": true,
+      "joker": false,
+      "discontinuity": false,
+      "missing": false,
+      "incomplete": false,
+      "offtrack": false,
+      "pitlane": false,
+      "pitIn": false,
+      "pitOut": false,
+      "trackTemp": 21.666656494140625,
+      "trackUsage": 57,
+      "trackWetness": 0,
+      "airTemp": 21.111112594604492,
+      "clouds": 1,
+      "airDensity": 1.1321003437042236,
+      "airPressure": 96049.3828125,
+      "windVel": 0.8940799832344055,
+      "windDir": 0,
+      "relativeHumidity": 0.44999998807907104,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 37.276911732,
+          "incomplete": false
+        },
+        {
+          "sectorTime": 32.276550953,
+          "incomplete": false
+        },
+        {
+          "sectorTime": 26.681654804,
+          "incomplete": false
+        },
+        {
+          "sectorTime": 34.848215845,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 51.39999,
+      "fuelUsed": 3.8093297,
+      "fuelAdded": 0,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": true,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP005",
+      "driver": {
+        "id": "DRV004",
+        "slug": "rui-castellan",
+        "firstName": "Rui",
+        "lastName": "Castellan"
+      },
+      "driverRating": 3581,
+      "event": "EVT006",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 1,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-07-01T20:15:51Z",
+      "lapNumber": 0,
+      "lapTime": 12.499999999,
+      "clean": false,
+      "joker": false,
+      "discontinuity": true,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": false,
+      "pitlane": true,
+      "pitIn": false,
+      "pitOut": true,
+      "trackTemp": 0,
+      "trackUsage": 28,
+      "trackWetness": -1,
+      "airTemp": 0,
+      "clouds": 0,
+      "airDensity": 0,
+      "airPressure": 0,
+      "windVel": 0,
+      "windDir": 0,
+      "relativeHumidity": 0,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 12.499999999,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 50,
+      "fuelUsed": 0.19749069,
+      "fuelAdded": 0,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP007",
+      "driver": {
+        "id": "DRV001",
+        "slug": "ada-vance",
+        "firstName": "Ada",
+        "lastName": "Vance"
+      },
+      "driverRating": 2038,
+      "event": "EVT008",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 1,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-07-10T18:10:20Z",
+      "lapNumber": 5,
+      "lapTime": 15.572607376,
+      "clean": false,
+      "joker": false,
+      "discontinuity": false,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": false,
+      "pitlane": true,
+      "pitIn": true,
+      "pitOut": false,
+      "trackTemp": 23.888885498046875,
+      "trackUsage": 57,
+      "trackWetness": 0,
+      "airTemp": 18.33333396911621,
+      "clouds": 4,
+      "airDensity": 1.1468253135681152,
+      "airPressure": 96000.6953125,
+      "windVel": 2.6822400093078613,
+      "windDir": 3.9269909858703613,
+      "relativeHumidity": 0.059999994933605194,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 15.566666666,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 41.285774,
+      "fuelUsed": 0.28868437,
+      "fuelAdded": 0,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP009",
+      "driver": {
+        "id": "DRV004",
+        "slug": "rui-castellan",
+        "firstName": "Rui",
+        "lastName": "Castellan"
+      },
+      "driverRating": 3581,
+      "event": "EVT006",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 4,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-07-01T20:52:29Z",
+      "lapNumber": 27,
+      "lapTime": 1.497086907,
+      "clean": false,
+      "joker": false,
+      "discontinuity": true,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": false,
+      "pitlane": false,
+      "pitIn": false,
+      "pitOut": false,
+      "trackTemp": 33.333343505859375,
+      "trackUsage": 28,
+      "trackWetness": 0,
+      "airTemp": 20,
+      "clouds": 2,
+      "airDensity": 1.1370210647583008,
+      "airPressure": 96029.9921875,
+      "windVel": 0.8940799832344055,
+      "windDir": 0,
+      "relativeHumidity": 0.3999999463558197,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 1.5,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 41.76598,
+      "fuelUsed": 0.061381806,
+      "fuelAdded": 0.060955048,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP010",
+      "driver": {
+        "id": "DRV004",
+        "slug": "rui-castellan",
+        "firstName": "Rui",
+        "lastName": "Castellan"
+      },
+      "driverRating": 3621,
+      "event": "EVT011",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 0,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-07-02T21:16:45Z",
+      "lapNumber": 33,
+      "lapTime": 1.4972269009999999,
+      "clean": false,
+      "joker": false,
+      "discontinuity": true,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": false,
+      "pitlane": false,
+      "pitIn": false,
+      "pitOut": false,
+      "trackTemp": 33.333343505859375,
+      "trackUsage": 28,
+      "trackWetness": 0,
+      "airTemp": 20,
+      "clouds": 2,
+      "airDensity": 1.1370210647583008,
+      "airPressure": 96029.9921875,
+      "windVel": 0.8940799832344055,
+      "windDir": 0,
+      "relativeHumidity": 0.3999999463558197,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 1.499999999,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 41.88052,
+      "fuelUsed": 0.05896887,
+      "fuelAdded": 0.05714798,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP013",
+      "driver": {
+        "id": "DRV012",
+        "slug": "nils-brandt",
+        "firstName": "Nils",
+        "lastName": "Brandt"
+      },
+      "driverRating": 2425,
+      "event": "EVT014",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 1,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-06-17T11:49:40Z",
+      "lapNumber": 2,
+      "lapTime": 123.816666666,
+      "clean": false,
+      "joker": false,
+      "discontinuity": true,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": true,
+      "pitlane": true,
+      "pitIn": false,
+      "pitOut": true,
+      "trackTemp": 0,
+      "trackUsage": 71,
+      "trackWetness": -1,
+      "airTemp": 0,
+      "clouds": 0,
+      "airDensity": 0,
+      "airPressure": 0,
+      "windVel": 0,
+      "windDir": 0,
+      "relativeHumidity": 0,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 28.057624981,
+          "incomplete": false
+        },
+        {
+          "sectorTime": 35.46679715,
+          "incomplete": false
+        },
+        {
+          "sectorTime": 30.340227047,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 30,
+      "fuelUsed": 3.2067661,
+      "fuelAdded": 0,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    },
+    {
+      "id": "LAP015",
+      "driver": {
+        "id": "DRV004",
+        "slug": "rui-castellan",
+        "firstName": "Rui",
+        "lastName": "Castellan"
+      },
+      "driverRating": 3621,
+      "event": "EVT011",
+      "eventType": 3,
+      "session": 0,
+      "sessionType": 1,
+      "run": 5,
+      "season": {
+        "id": 34,
+        "name": "2026 Season 3",
+        "shortName": "2026S3",
+        "start": "2026-06-16T00:00:00Z",
+        "end": "2026-09-15T00:00:00Z"
+      },
+      "car": {
+        "id": 175,
+        "name": "McLaren 720S GT3 EVO",
+        "platform": "iracing",
+        "platform_id": "188"
+      },
+      "track": {
+        "id": 446,
+        "name": "Circuit de Spa-Francorchamps",
+        "variant": "Endurance",
+        "platform": "iracing",
+        "platform_id": "525"
+      },
+      "startTime": "2026-07-02T21:37:37Z",
+      "lapNumber": 42,
+      "lapTime": 1.606287515,
+      "clean": false,
+      "joker": false,
+      "discontinuity": true,
+      "missing": false,
+      "incomplete": true,
+      "offtrack": false,
+      "pitlane": false,
+      "pitIn": false,
+      "pitOut": false,
+      "trackTemp": 33.333343505859375,
+      "trackUsage": 28,
+      "trackWetness": 0,
+      "airTemp": 20,
+      "clouds": 2,
+      "airDensity": 1.1370210647583008,
+      "airPressure": 96029.9921875,
+      "windVel": 0.8940799832344055,
+      "windDir": 0,
+      "relativeHumidity": 0.3999999463558197,
+      "fogLevel": 0,
+      "precipitation": 0,
+      "sectors": [
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 0,
+          "incomplete": true
+        },
+        {
+          "sectorTime": 1.616666666,
+          "incomplete": false
+        }
+      ],
+      "fuelLevel": 1.4025346,
+      "fuelUsed": 0.06480149,
+      "fuelAdded": 4.3617406,
+      "weightPenalty": 0,
+      "powerAdjust": 0,
+      "tireCompound": 1,
+      "ghostAvailable": false,
+      "canViewTelemetry": true,
+      "canViewSetup": true
+    }
+  ]
+}
