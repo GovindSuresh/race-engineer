@@ -1,4 +1,5 @@
-import type { Stint } from "../types/race-data";
+import type { ConditionsSummary, Stint } from "../types/race-data";
+import { computeConditionsSummary } from "./conditions";
 import { computeAverageFuelBurnRate } from "./fuel";
 import { computeStintPaceTrend } from "./stint-pace-trend";
 
@@ -38,6 +39,17 @@ export interface RunComparison {
    *  Averaged across stints rather than fitted across the whole run, because
    *  a run-wide fit would read the fuel-load reset at every stop as pace. */
   paceTrendMsPerLap: number | null;
+  /** Track and weather conditions over the same laps every figure above is
+   *  built from, or null when the run carries no weather data (an
+   *  iRacing-only source).
+   *
+   *  It sits on the comparison rather than beside it because conditions are
+   *  the first thing that invalidates one: two runs half a second apart on a
+   *  track 8°C different aren't a setup result, and a table that shows the
+   *  half second without the 8°C invites exactly that conclusion. Deliberately
+   *  computed from the FILTERED laps, like every other column, so a run
+   *  narrowed to its clean laps reports the conditions of those laps. */
+  conditions: ConditionsSummary | null;
 }
 
 function timedLapTimes(stints: Stint[]): number[] {
@@ -102,6 +114,8 @@ export function computeRunComparison(runs: RunComparisonInput[]): RunComparison[
       fuelAddedTotal: fuelAdds.length > 0 ? fuelAdds.reduce((a, b) => a + b, 0) : null,
       paceTrendMsPerLap:
         trends.length > 0 ? trends.reduce((a, b) => a + b, 0) / trends.length : null,
+      conditions:
+        computeConditionsSummary(run.stints.flatMap((stint) => stint.laps)) ?? null,
     };
   });
 }

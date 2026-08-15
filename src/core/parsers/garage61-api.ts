@@ -32,6 +32,10 @@ function num(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function nonNegativeOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 function bool(value: unknown): boolean {
   return value === true;
 }
@@ -121,7 +125,10 @@ export function garage61ApiLapToRow(lap: RawGarage61Lap): RawGarage61Row {
     pitIn: bool(lap.pitIn),
     pitOut: bool(lap.pitOut),
     trackTempC: num(lap.trackTemp),
-    trackUsagePct: num(lap.trackUsage),
+    // Not `num()`: its 0 fallback would read as a green track. Garage61 marks
+    // an unrecorded reading with a negative, the same way it does for
+    // `trackWetness`, so both absence and -1 become null.
+    trackUsagePct: nonNegativeOrNull(lap.trackUsage),
     airTempC: num(lap.airTemp),
     cloudCover: num(lap.clouds),
     airDensity: num(lap.airDensity),

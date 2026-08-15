@@ -18,3 +18,21 @@ export function formatLapTime(ms: number): string {
 export function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
+
+/** Formats a temperature, or an em dash when there's no reading — which is
+ *  distinct from 0°C and must not be shown as one. */
+export function formatCelsius(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)}°C`;
+}
+
+/** Formats a `ConditionsSummary`'s track-usage (rubber) figures.
+ *
+ *  Collapses to a single value when the run never changed state, which is
+ *  every real session measured so far. Renders an em dash when nothing was
+ *  recorded — the one thing it must NOT do is print "0%", which is a real
+ *  reading meaning a green track. */
+export function formatTrackUsage(minPct: number | null, maxPct: number | null): string {
+  if (minPct === null || maxPct === null) return "—";
+  if (minPct === maxPct) return `${minPct.toFixed(0)}%`;
+  return `${minPct.toFixed(0)}–${maxPct.toFixed(0)}%`;
+}
