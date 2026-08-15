@@ -29,7 +29,7 @@ function makeLap(overrides: Partial<RawGarage61Lap> = {}): RawGarage61Lap {
     fuelLevel: 90,
     fuelUsed: 3.5,
     fuelAdded: 0,
-    sectors: [{ number: 1, time: 40 }],
+    sectors: [{ sectorTime: 40, incomplete: false }],
     trackTemp: 30,
     trackUsage: 55,
     airTemp: 22,
@@ -68,42 +68,39 @@ describe("garage61ApiDriverName", () => {
 });
 
 describe("garage61ApiSectorsToColumns", () => {
-  it("places 1-based indexed sectors into the CSV's four columns", () => {
+  it("maps sectors positionally, since entries carry no index", () => {
     expect(
       garage61ApiSectorsToColumns([
-        { number: 1, time: 40 },
-        { number: 2, time: 45 },
-        { number: 3, time: 30 },
-        { number: 4, time: 23.5 },
+        { sectorTime: 40, incomplete: false },
+        { sectorTime: 45, incomplete: false },
+        { sectorTime: 30, incomplete: false },
+        { sectorTime: 23.5, incomplete: false },
       ]),
     ).toEqual([40, 45, 30, 23.5]);
   });
 
-  it("infers a 0-based index from the smallest one present", () => {
+  it("leaves trailing columns null on a three-sector lap", () => {
     expect(
       garage61ApiSectorsToColumns([
-        { number: 0, time: 40 },
-        { number: 1, time: 45 },
+        { sectorTime: 40, incomplete: false },
+        { sectorTime: 45, incomplete: false },
+        { sectorTime: 30, incomplete: false },
       ]),
-    ).toEqual([40, 45, null, null]);
+    ).toEqual([40, 45, 30, null]);
   });
 
-  it("falls back to array order when entries carry no index", () => {
-    expect(garage61ApiSectorsToColumns([{ time: 40 }, { time: 45 }])).toEqual([
-      40,
-      45,
-      null,
-      null,
-    ]);
-  });
-
-  it("accepts the alternative time key names the docs leave unspecified", () => {
-    expect(garage61ApiSectorsToColumns([{ lapTime: 40 }, { duration: 45 }])).toEqual([
-      40,
-      45,
-      null,
-      null,
-    ]);
+  // The important one. An untimed sector reports `sectorTime: 0`, and reading
+  // that as a 0.0s sector would invent a lap segment that never happened — and
+  // disagree with the CSV path, which leaves the cell empty for the same lap.
+  it("reads an incomplete sector as null, not as a zero-second sector", () => {
+    expect(
+      garage61ApiSectorsToColumns([
+        { sectorTime: 0, incomplete: true },
+        { sectorTime: 0, incomplete: true },
+        { sectorTime: 0, incomplete: true },
+        { sectorTime: 1.5, incomplete: false },
+      ]),
+    ).toEqual([null, null, null, 1.5]);
   });
 
   it("returns four nulls for a missing or empty sectors array", () => {
@@ -113,11 +110,11 @@ describe("garage61ApiSectorsToColumns", () => {
 
   it("drops sectors beyond the fourth rather than overflowing the tuple", () => {
     const columns = garage61ApiSectorsToColumns([
-      { number: 1, time: 10 },
-      { number: 2, time: 11 },
-      { number: 3, time: 12 },
-      { number: 4, time: 13 },
-      { number: 5, time: 14 },
+      { sectorTime: 10 },
+      { sectorTime: 11 },
+      { sectorTime: 12 },
+      { sectorTime: 13 },
+      { sectorTime: 14 },
     ]);
     expect(columns).toHaveLength(4);
     expect(columns).toEqual([10, 11, 12, 13]);
@@ -241,9 +238,9 @@ describe("describeGarage61LapShape", () => {
 
   it("reports the sectors key shape — the one part of the schema the docs omit", () => {
     const report = describeGarage61LapShape([
-      makeLap({ sectors: [{ number: 1, time: 40 }] }),
+      makeLap({ sectors: [{ sectorTime: 40, incomplete: false }] }),
     ]);
-    expect(report.sectorKeyShapes).toEqual(["number,time"]);
+    expect(report.sectorKeyShapes).toEqual(["incomplete,sectorTime"]);
   });
 
   it("flags load-bearing fields absent from every lap, e.g. the fuel deriveStints needs", () => {

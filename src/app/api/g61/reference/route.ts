@@ -1,6 +1,7 @@
 import {
   garage61ErrorResponse,
   garage61Get,
+  garage61List,
   notConnectedResponse,
   readGarage61Token,
 } from "@/lib/garage61-server";
@@ -8,10 +9,6 @@ import type { Garage61Reference } from "@/lib/garage61-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface ListEnvelope<T> {
-  items?: T[];
-}
 
 interface RawTrack {
   id?: number;
@@ -42,26 +39,29 @@ export async function GET() {
   if (!token) return notConnectedResponse();
 
   try {
-    const [tracks, cars, teams] = await Promise.all([
-      garage61Get<ListEnvelope<RawTrack>>("/tracks", token),
-      garage61Get<ListEnvelope<RawCar>>("/cars", token),
-      garage61Get<ListEnvelope<RawTeam>>("/teams", token),
+    const [tracksPayload, carsPayload, teamsPayload] = await Promise.all([
+      garage61Get<unknown>("/tracks", token),
+      garage61Get<unknown>("/cars", token),
+      garage61Get<unknown>("/teams", token),
     ]);
 
     const reference: Garage61Reference = {
-      tracks: (tracks.items ?? [])
+      tracks: garage61List<RawTrack>(tracksPayload)
         .filter((track): track is RawTrack & { id: number } => typeof track.id === "number")
         .map((track) => ({
           id: track.id,
           name: track.name ?? `Track ${track.id}`,
-          variant: track.variant ?? null,
+          // Ovals and single-layout tracks report `variant: ""`, not an absent
+          // field, so normalise here rather than leaving every consumer to
+          // remember that an empty string means "no variant".
+          variant: track.variant ? track.variant : null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      cars: (cars.items ?? [])
+      cars: garage61List<RawCar>(carsPayload)
         .filter((car): car is RawCar & { id: number } => typeof car.id === "number")
         .map((car) => ({ id: car.id, name: car.name ?? `Car ${car.id}` }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      teams: (teams.items ?? [])
+      teams: garage61List<RawTeam>(teamsPayload)
         .filter((team): team is RawTeam & { slug: string } => typeof team.slug === "string")
         .map((team) => ({ slug: team.slug, name: team.name ?? team.slug })),
     };
