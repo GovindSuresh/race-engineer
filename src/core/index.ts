@@ -79,12 +79,15 @@ export {
   applyLapFilters,
   countLapSelection,
   finalLapNumber,
+  openingLapNumber,
+  lapRuleContext,
   lapRuleMatches,
   LAP_FILTER_KEYS,
 } from "./transforms/lap-selection";
 export type {
   LapFilters,
   LapFilterKey,
+  LapRuleContext,
   LapSelectionCounts,
   DriverLapSelection,
   RunLapSelection,

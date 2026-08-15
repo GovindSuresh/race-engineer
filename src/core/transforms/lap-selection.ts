@@ -18,18 +18,42 @@ export interface LapFilters {
    *  pitOut both false, because G61 only flags a COMPLETED out-lap, so
    *  `excludePitLaps` cannot catch it. */
   dropFinalLap: boolean;
+  /** Drop the run's opening lap.
+   *
+   *  Lap 0 is never a representative lap: in practice and qualifying it's the
+   *  out-lap from the garage, and in a race it's the procession (formation)
+   *  lap before the start. Either way it's driven at a pace that has nothing
+   *  to do with the car's, and it lands in the averages like any other lap.
+   *
+   *  `excludePitLaps` doesn't reliably catch it — Garage61 only flags a
+   *  COMPLETED out-lap, and a formation lap isn't a pit lap at all — which is
+   *  why this is its own rule rather than a widening of that one. */
+  dropOpeningLap: boolean;
 }
 
 export type LapFilterKey = keyof LapFilters;
+
+/** What a rule needs to know about the run a lap sits in, beyond the lap
+ *  itself. An object rather than positional arguments so adding the next
+ *  run-scoped rule doesn't change every call site again. */
+export interface LapRuleContext {
+  /** The run's last lap number, or null when dropping it would leave nothing. */
+  runFinalLap: number | null;
+  /** The run's first lap number, or null on the same condition. */
+  runOpeningLap: number | null;
+}
 
 /** Every rule as a predicate: does this lap match the rule, ignoring whether
  *  the rule is currently switched on. Defined once here so the filtering path
  *  and the "would drop N laps" counts can never drift apart — they were
  *  previously two separate inline expressions in the page component. */
-const RULES: Record<LapFilterKey, (lap: LapRecord, runFinalLap: number | null) => boolean> = {
+const RULES: Record<LapFilterKey, (lap: LapRecord, context: LapRuleContext) => boolean> = {
   cleanLapsOnly: (lap) => lap.isClean !== true,
   excludePitLaps: (lap) => lap.pitIn === true || lap.pitOut === true,
-  dropFinalLap: (lap, runFinalLap) => runFinalLap !== null && lap.lapNumber === runFinalLap,
+  dropFinalLap: (lap, { runFinalLap }) =>
+    runFinalLap !== null && lap.lapNumber === runFinalLap,
+  dropOpeningLap: (lap, { runOpeningLap }) =>
+    runOpeningLap !== null && lap.lapNumber === runOpeningLap,
 };
 
 export const LAP_FILTER_KEYS = Object.keys(RULES) as LapFilterKey[];
@@ -38,8 +62,8 @@ export const LAP_FILTER_KEYS = Object.keys(RULES) as LapFilterKey[];
  *  UI say WHY a lap isn't counting instead of only that it isn't — a lap greyed
  *  out with no explanation looks like a bug. Callers that only care about
  *  active rules filter the result by their own `LapFilters`. */
-export function lapRuleMatches(lap: LapRecord, runFinalLap: number | null): LapFilterKey[] {
-  return LAP_FILTER_KEYS.filter((key) => RULES[key](lap, runFinalLap));
+export function lapRuleMatches(lap: LapRecord, context: LapRuleContext): LapFilterKey[] {
+  return LAP_FILTER_KEYS.filter((key) => RULES[key](lap, context));
 }
 
 /** One driver's laps within a run, plus the laps the user has ticked off by
@@ -70,6 +94,30 @@ export function finalLapNumber(run: RunLapSelection): number | null {
   return lapCount > 1 ? highest : null;
 }
 
+/** The run's lowest lap number — normally 0, but taken from the data rather
+ *  than assumed, since an export can begin part-way through a session.
+ *
+ *  Null when dropping it would leave nothing to analyse, matching
+ *  `finalLapNumber`; a one-lap run filtered by both rules would otherwise
+ *  count nothing at all. */
+export function openingLapNumber(run: RunLapSelection): number | null {
+  let lowest = Infinity;
+  let lapCount = 0;
+  for (const driver of run.drivers) {
+    for (const lap of driver.laps) {
+      lapCount++;
+      if (lap.lapNumber < lowest) lowest = lap.lapNumber;
+    }
+  }
+  return lapCount > 1 ? lowest : null;
+}
+
+/** Both run-scoped bounds in one call, so callers can't compute one and forget
+ *  the other. */
+export function lapRuleContext(run: RunLapSelection): LapRuleContext {
+  return { runFinalLap: finalLapNumber(run), runOpeningLap: openingLapNumber(run) };
+}
+
 /** Applies the active rules and the user's hand-picks to one driver's laps.
  *
  *  Blanks the lap TIME of a dropped lap (to -1) rather than removing the lap
@@ -81,12 +129,12 @@ export function finalLapNumber(run: RunLapSelection): number | null {
 export function applyLapFilters(
   laps: LapRecord[],
   filters: LapFilters,
-  options: { excludedLapNumbers?: ReadonlySet<number>; runFinalLap: number | null },
+  options: { excludedLapNumbers?: ReadonlySet<number> } & LapRuleContext,
 ): LapRecord[] {
   return laps.map((lap) => {
     const droppedByHand = options.excludedLapNumbers?.has(lap.lapNumber) ?? false;
     const droppedByRule = LAP_FILTER_KEYS.some(
-      (key) => filters[key] && RULES[key](lap, options.runFinalLap),
+      (key) => filters[key] && RULES[key](lap, options),
     );
     return droppedByHand || droppedByRule ? { ...lap, lapTimeMs: -1 } : lap;
   });
@@ -127,6 +175,7 @@ export function countLapSelection(
     cleanLapsOnly: 0,
     excludePitLaps: 0,
     dropFinalLap: 0,
+    dropOpeningLap: 0,
   };
   let total = 0;
   let counted = 0;
@@ -134,7 +183,7 @@ export function countLapSelection(
   let byHand = 0;
 
   for (const run of runs) {
-    const runFinalLap = finalLapNumber(run);
+    const context = lapRuleContext(run);
     for (const driver of run.drivers) {
       for (const lap of driver.laps) {
         if (lap.lapTimeMs <= 0) continue;
@@ -142,7 +191,7 @@ export function countLapSelection(
 
         let droppedByRule = false;
         for (const key of LAP_FILTER_KEYS) {
-          if (!RULES[key](lap, runFinalLap)) continue;
+          if (!RULES[key](lap, context)) continue;
           wouldDrop[key]++;
           if (filters[key]) droppedByRule = true;
         }

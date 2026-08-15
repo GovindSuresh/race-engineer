@@ -5,7 +5,7 @@ import {
   applyLapFilters,
   countLapSelection,
   deriveStints,
-  finalLapNumber,
+  lapRuleContext,
   computeStintPaceTrend,
   computeFuelBurnRate,
   computeAverageFuelBurnRate,
@@ -21,6 +21,7 @@ import {
   type LapFilterKey,
   type LapFilters,
   type LapRecord,
+  type LapRuleContext,
   type RunLapSelection,
   type Stint,
 } from "@/core";
@@ -98,6 +99,7 @@ const RULE_LABELS: Record<LapFilterKey, string> = {
   cleanLapsOnly: "Clean laps only",
   excludePitLaps: "No pit laps",
   dropFinalLap: "Drop final lap",
+  dropOpeningLap: "Drop opening lap",
 };
 
 /** Terse forms of the same labels, for the per-lap "dropped by rule" column
@@ -106,6 +108,7 @@ const RULE_SHORT: Record<LapFilterKey, string> = {
   cleanLapsOnly: "unclean",
   excludePitLaps: "pit lap",
   dropFinalLap: "final lap",
+  dropOpeningLap: "opening lap",
 };
 
 interface DriverRun {
@@ -159,9 +162,10 @@ interface ProcessedRun {
   label: string;
   /** date · driver · car — see `runDescriptor`. */
   descriptor: string;
-  /** The lap `dropFinalLap` targets, resolved per run. Kept here so the lap
-   *  picker can report which rules hit a given lap without recomputing it. */
-  finalLap: number | null;
+  /** The run-scoped bounds the rules need (first and last lap). Kept here so
+   *  the lap picker can report which rules hit a given lap without
+   *  recomputing them. */
+  ruleContext: LapRuleContext;
   drivers: ProcessedDriver[];
 }
 
@@ -199,12 +203,16 @@ export default function StintPlanner() {
   const [baselineSlot, setBaselineSlot] = useState<number | null>(null);
   // `dropFinalLap` defaults ON: quitting out during the final stop is the
   // normal way a practice run ends, so the part-lap it leaves behind is noise
-  // far more often than it's data. Still a toggle, so nothing is silently
-  // discarded — and the selection panel shows what it removed.
+  // far more often than it's data. `dropOpeningLap` defaults ON for the mirror
+  // reason: lap 0 is the out-lap from the garage in practice and qualifying,
+  // and the procession lap in a race — never a representative lap of the car.
+  // Both are still toggles, so nothing is silently discarded — and the
+  // selection panel shows what each one removed.
   const [filters, setFilters] = useState<LapFilters>({
     cleanLapsOnly: false,
     excludePitLaps: false,
     dropFinalLap: true,
+    dropOpeningLap: true,
   });
   // Whether the sticky bar's copy of the selection panel is expanded.
   const [barOpen, setBarOpen] = useState(false);
@@ -364,18 +372,18 @@ export default function StintPlanner() {
   const processedRuns = useMemo<ProcessedRun[]>(() => {
     return runs.flatMap((run, slot) => {
       if (!run || hiddenRuns.has(slot)) return [];
-      const runFinalLap = finalLapNumber({ drivers: run.drivers });
+      const ruleContext = lapRuleContext({ drivers: run.drivers });
 
       return [
         {
           slot,
           label: run.label,
           descriptor: runDescriptor(run),
-          finalLap: runFinalLap,
+          ruleContext,
           drivers: run.drivers.map((driver) => {
             const filtered = applyLapFilters(driver.laps, filters, {
               excludedLapNumbers: excludedLaps[exclusionKey(slot, driver.driverName)],
-              runFinalLap,
+              ...ruleContext,
             });
             // applyLapFilters maps 1:1 over driver.laps, so index i lines up and
             // each filtered lap is a distinct object reference — which is what
@@ -457,7 +465,7 @@ export default function StintPlanner() {
               lapNumber: lap.lapNumber,
               time: rawTimeMs > 0 ? formatLapTime(rawTimeMs) : null,
               handDropped: excluded?.has(lap.lapNumber) ?? false,
-              droppedBy: lapRuleMatches(lap, run.finalLap)
+              droppedBy: lapRuleMatches(lap, run.ruleContext)
                 .filter((key) => filters[key])
                 .map((key) => RULE_SHORT[key]),
             };
@@ -1047,7 +1055,7 @@ export default function StintPlanner() {
                                                       driver.rawTimeByLap.get(lap) ?? lap.lapTimeMs;
                                                     const byHand =
                                                       excluded?.has(lap.lapNumber) ?? false;
-                                                    const byRule = lapRuleMatches(lap, run.finalLap)
+                                                    const byRule = lapRuleMatches(lap, run.ruleContext)
                                                       .filter((key) => filters[key])
                                                       .map((key) => RULE_SHORT[key]);
                                                     const isIncluded = !byHand && byRule.length === 0;
