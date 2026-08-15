@@ -63,8 +63,15 @@ async function readError(response: Response): Promise<string> {
  *
  *  Every call goes to this app's own `/api/g61/*` routes, never to Garage61
  *  directly — that API sends no CORS headers, and the token is httpOnly and
- *  deliberately unreachable from here. */
-export function useGarage61() {
+ *  deliberately unreachable from here.
+ *
+ *  `enabled` gates the two effects below, and exists because of a collision
+ *  between two rules. Hooks must be called unconditionally, so this one runs
+ *  whether or not the Garage61 tab is showing — but the account flow is one of
+ *  two run sources, and choosing the CSV one should cost no API calls at all.
+ *  Without the gate, every load of the Stint Planner spent four upstream calls
+ *  on data the user might never look at. Pass `false` and nothing is fetched. */
+export function useGarage61(enabled: boolean) {
   const [status, setStatus] = useState<Garage61ConnectionStatus>("checking");
   const [profile, setProfile] = useState<Garage61Profile | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -75,9 +82,17 @@ export function useGarage61() {
 
   const [progress, setProgress] = useState<Garage61FetchProgress>(IDLE);
 
-  // Restore the connected state on mount. The cookie is httpOnly, so asking
-  // the server is the only way to know whether one is present.
+  // Restore the connected state. The cookie is httpOnly, so asking the server
+  // is the only way to know whether one is present.
+  //
+  // The `status === "checking"` guard makes this run once rather than once per
+  // enable: "checking" is only true before the first answer, so flipping
+  // between the CSV and Garage61 tabs re-runs the effect but re-fetches
+  // nothing. connect() and disconnect() are the only other things that change
+  // the cookie, and both set status themselves.
   useEffect(() => {
+    if (!enabled || status !== "checking") return;
+
     let cancelled = false;
 
     (async () => {
@@ -98,14 +113,20 @@ export function useGarage61() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled, status]);
 
   // Track and car lists are needed before any lap search can run (`/laps`
   // requires a track), so fetch them as soon as there's a connection.
+  //
+  // This one has no equivalent of the "checking" guard — there's no state that
+  // distinguishes "not loaded yet" from "loaded", short of adding one — so
+  // switching tabs does re-request it. That's deliberate: the route caches the
+  // three upstream lists for a day, so the repeat costs a local round trip and
+  // nothing at Garage61.
   useEffect(() => {
     // Clearing on disconnect is `disconnect`'s job, not this effect's —
     // setting state synchronously in an effect body cascades renders.
-    if (status !== "connected") return;
+    if (!enabled || status !== "connected") return;
 
     let cancelled = false;
 
@@ -127,7 +148,7 @@ export function useGarage61() {
     return () => {
       cancelled = true;
     };
-  }, [status]);
+  }, [enabled, status]);
 
   const connect = useCallback(async (token: string) => {
     setConnecting(true);

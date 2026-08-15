@@ -1,6 +1,7 @@
 import {
+  REFERENCE_TTL_MS,
   garage61ErrorResponse,
-  garage61Get,
+  garage61GetCached,
   garage61List,
   notConnectedResponse,
   readGarage61Token,
@@ -33,16 +34,21 @@ interface RawTeam {
  *
  *  `tracks` exists because `/laps` REQUIRES a track id — there is no "give me
  *  everything" lap search, so the UI can't fetch anything until a track is
- *  chosen. All three lists are personalised to the token's user. */
+ *  chosen. All three lists are personalised to the token's user.
+ *
+ *  Cached for a day (per user — see `cacheKey`): this route is hit on every
+ *  mount of the session picker, but its answer changes a few times a season.
+ *  The cache also collapses the two near-simultaneous calls React Strict Mode
+ *  makes in development into a single upstream request. */
 export async function GET() {
   const token = await readGarage61Token();
   if (!token) return notConnectedResponse();
 
   try {
     const [tracksPayload, carsPayload, teamsPayload] = await Promise.all([
-      garage61Get<unknown>("/tracks", token),
-      garage61Get<unknown>("/cars", token),
-      garage61Get<unknown>("/teams", token),
+      garage61GetCached<unknown>("/tracks", token, REFERENCE_TTL_MS),
+      garage61GetCached<unknown>("/cars", token, REFERENCE_TTL_MS),
+      garage61GetCached<unknown>("/teams", token, REFERENCE_TTL_MS),
     ]);
 
     const reference: Garage61Reference = {
