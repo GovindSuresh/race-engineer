@@ -60,6 +60,14 @@ export type {
   RunComparisonInput,
   RunLapDistribution,
 } from "./transforms/run-comparison";
+export { computeRunLapDeltas } from "./transforms/run-lap-delta";
+export type {
+  RunLapDeltaInput,
+  RunLapDeltaPoint,
+  RunLapDeltaSeries,
+  RunLapDeltaBaselinePoint,
+  RunLapDeltas,
+} from "./transforms/run-lap-delta";
 export { buildRaceSummary, listTeams } from "./transforms/race-summary";
 export type { TeamOption } from "./transforms/race-summary";
 export { computeRaceKpis } from "./transforms/race-kpis";
