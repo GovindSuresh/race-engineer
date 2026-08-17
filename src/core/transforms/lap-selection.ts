@@ -1,6 +1,6 @@
 import type { LapRecord } from "../types/race-data";
 
-/** The rule-based lap filters the Stint Planner offers, as opposed to laps the
+/** The rule-based lap filters the Stint Analysis offers, as opposed to laps the
  *  user picks out individually by hand. Every one of them answers "which laps
  *  should count towards pace", never "which laps happened" — see
  *  `applyLapFilters` for why that distinction matters. */

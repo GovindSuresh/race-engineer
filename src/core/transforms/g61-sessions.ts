@@ -2,7 +2,7 @@ import type { RawGarage61Lap, RawGarage61Row } from "../types/race-data";
 import { garage61ApiLapToRow, sortGarage61ApiLaps } from "../parsers/garage61-api";
 
 /** One practice session's worth of laps — the API-side equivalent of a single
- *  Garage61 CSV export, and therefore of one Stint Planner run slot.
+ *  Garage61 CSV export, and therefore of one Stint Analysis run slot.
  *
  *  Getting this unit right is load-bearing rather than cosmetic. A slot that
  *  accidentally spanned two sessions would run them together into one lap

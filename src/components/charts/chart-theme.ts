@@ -27,7 +27,7 @@ export function seriesColor(index: number): string {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
-/** Palette indices for the Stint Planner's four run slots.
+/** Palette indices for the Stint Analysis's four run slots.
  *
  *  Not simply 0-3: that took orange and yellow for runs 2 and 4, two warm
  *  neighbours that read as the same colour in a thin chart line. Measured with
@@ -45,7 +45,7 @@ export function seriesColor(index: number): string {
  *  keeps its colour when another slot is cleared. */
 const RUN_SLOT_COLOR_INDICES = [0, 2, 3, 7] as const;
 
-/** Colour for Stint Planner run slot 0-3. Use this, not `seriesColor(slot)`,
+/** Colour for Stint Analysis run slot 0-3. Use this, not `seriesColor(slot)`,
  *  for anything identifying a run. */
 export function runColor(slot: number): string {
   return seriesColor(RUN_SLOT_COLOR_INDICES[slot % RUN_SLOT_COLOR_INDICES.length]);

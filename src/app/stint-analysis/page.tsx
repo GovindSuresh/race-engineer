@@ -158,7 +158,7 @@ interface ProcessedDriver {
 interface ProcessedRun {
   slot: number;
   /** Where the run came from — the filename, or the session description.
-   *  Still shown in section 04's per-run header, where provenance is what you
+   *  Still shown in the stint explorer's per-run header, where provenance is what you
    *  want; the comparison table uses `descriptor` instead. */
   label: string;
   /** date · driver · car — see `runDescriptor`. */
@@ -185,7 +185,7 @@ function stintKey(slot: number, driverName: string, stintNumber: number): string
   return `${slot}:${driverName}:${stintNumber}`;
 }
 
-export default function StintPlanner() {
+export default function StintAnalysis() {
   const [runs, setRuns] = useState<(RunData | null)[]>(Array(MAX_RUNS).fill(null));
   const [errors, setErrors] = useState<(string | null)[]>(Array(MAX_RUNS).fill(null));
   const [resetKeys, setResetKeys] = useState<number[]>(Array(MAX_RUNS).fill(0));
@@ -619,7 +619,7 @@ export default function StintPlanner() {
   return (
     <>
       <AppHeader
-        title="Stint Planner"
+        title="Stint Analysis"
         context={hasAnyRun ? `${loadedSlots.length} run${loadedSlots.length > 1 ? "s" : ""}` : "Practice"}
         below={
           showSelectionBar ? (
@@ -644,8 +644,7 @@ export default function StintPlanner() {
           <SectionHeading
             eyebrow="/// Session data"
             title="Practice runs"
-            tagline="up to four, compared side by side"
-            note="Each slot takes one practice session — a Garage61 CSV export, or a session pulled straight from a connected Garage61 account. Colours here match the charts and tables below, so a run keeps the same identity throughout — clearing a slot never repaints the others."
+            note="You can choose to either manually upload CSVs of sessions from Garage61, or connect to your Garage61 account. With the latter you can see all team data."
           />
           <Panel className="mt-3.5">
             {/* Two ways to fill the same four slots. Uploading is the default
@@ -759,9 +758,7 @@ export default function StintPlanner() {
             className="mt-8 scroll-mt-24"
           >
             <SectionHeading
-              eyebrow="/// Lap selection"
               title="Lap Selection"
-              tagline="what every number below is built from"
               note="Configuration, not analysis: three ways of narrowing the data — which runs are in scope, the rules applied to every lap, and individual laps ticked off by hand. Nothing here changes the underlying files. Pit-stop boundaries, fuel and weather always come from the full lap set, so a dropped lap only stops counting towards pace."
             />
             <div className="mt-3.5">{selectionPanel}</div>
@@ -777,17 +774,16 @@ export default function StintPlanner() {
         {processedRuns.length > 0 && (
           <>
             {/* The rule marks where configuration ends and analysis begins —
-                the numbered sections below all read from the selection above. */}
+                every section below reads from the selection above. The eyebrow
+                labels that boundary once, rather than each section repeating a
+                compressed version of its own title. */}
             <section className="mt-10 border-t border-line pt-10">
               <SectionHeading
-                eyebrow="01 · Overview"
-                title="Run comparison"
-                tagline="which session was actually quicker"
+                eyebrow="/// Run Analysis"
+                title="Overview"
                 note={
                   <>
-                    Pace and fuel per driver per run. <b className="text-muted">Laps</b> is how many
-                    laps survived the lap selection above, so it’s the count these averages are
-                    over. <b className="text-muted">Pit stops</b> counts stint boundaries, so a run
+                    Overview of the entire run. <b className="text-muted">Pit stops</b> counts stint boundaries, so a run
                     driven straight through shows zero. <b className="text-muted">Fuel used</b> and{" "}
                     <b className="text-muted">avg burn</b> come from every lap the car ran — fuel
                     burns whether or not the lap counted.
@@ -862,20 +858,12 @@ export default function StintPlanner() {
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="02 · Pace"
-                title="Lap times across runs"
-                tagline="every lap, every run, one scale"
+                title="Lap times"
                 note={
                   <>
-                    Drag below the chart to zoom into a stretch of laps, one lap at a time.
                     Dropped laps are left out of the line entirely rather than plotted as a
                     spike, so the y-axis stays scaled to real running pace — a gap in a line
-                    is a dropped lap. A <b className="text-muted">diamond</b> marks each
-                    stint’s best counted lap, so you can read a run as the sequence of
-                    stints it was; the dashed amber line is the best lap of any run. Hover
-                    any lap to see which <b className="text-muted">stint</b> it belongs to,
-                    per run — stint boundaries aren’t drawn on the chart itself because
-                    every run has its own on this shared lap axis.
+                    is a dropped lap. Hover over laps for more details.
                   </>
                 }
               />
@@ -890,20 +878,14 @@ export default function StintPlanner() {
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="03 · Compare"
-                title="Run against run"
-                tagline="the same numbers, pivoted"
+                title="Variance & Trends"
                 note={
                   <>
-                    Section 04 shows each run in full; this shows all of them side by side.
-                    Pick a run under <b className="text-muted">Compare against</b> to read the
-                    others as deltas from it — green is better, red is worse.{" "}
+                    Compare the runs in more detail.
+                    Selecting a run in the selection box to compare against will convert
+                    the other runs to deltas from it.{" "}
                     <b className="text-muted">Spread</b> is the standard deviation of lap
-                    times: two runs can share an average and be nothing alike, and the
-                    tighter one is the one a driver can actually repeat. The boxplot shows
-                    the same thing visually — box edges are the quartiles, whiskers reach
-                    the last lap within 1.5×IQR, and anything past them is drawn as an
-                    outlier rather than stretching the whisker.
+                    times. Pace trend is the lap-time slope within the stint.
                   </>
                 }
               />
@@ -924,18 +906,10 @@ export default function StintPlanner() {
 
             <section className="mt-11">
               <SectionHeading
-                eyebrow="04 · Stints"
                 title="Stint explorer"
-                tagline="what each fuel run cost"
                 note={
                   <>
-                    <b className="text-muted">Fuel added</b> is Garage61’s exact figure for the
-                    stop that started this stint — the column to read when comparing a short-fill
-                    strategy against a full tank. <b className="text-muted">Pace trend</b> is the
-                    lap-time slope within the stint (positive = getting slower); it reflects fuel
-                    burn-off and traffic as much as tyres, so don’t read it as degradation
-                    alone. Expand a stint to see its individual laps and why any of them
-                    aren’t counting; to change that, use the lap picker up in Lap Selection.
+                    Dive into each run and stint in more detail.
                   </>
                 }
               />

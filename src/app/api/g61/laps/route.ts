@@ -33,7 +33,7 @@ const CLIENT_PARAMS = [
  *  dangerous — you get a plausible-looking response containing the wrong laps:
  *
  *  - `group` defaults to `driver`, which returns only each driver's PERSONAL
- *    BEST lap. A stint planner fed one lap per driver looks empty, not broken.
+ *    BEST lap. A stint analysis fed one lap per driver looks empty, not broken.
  *  - `lapTypes` defaults to normal laps only, stripping in- and out-laps. That
  *    removes the pit flags `deriveStints` splits on, so every session would
  *    collapse into a single stint, and the "No pit laps" filter would have

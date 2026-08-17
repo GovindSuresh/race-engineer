@@ -2,18 +2,16 @@ import Link from "next/link";
 
 const ENTRY_POINTS = [
   {
-    href: "/stint-planner",
+    href: "/stint-analysis",
     index: "01",
-    title: "Stint Planner",
-    tagline: "before the race",
-    body: "Compare up to four Garage61 practice exports side by side — pace, fuel burn, stint length, and whether a different fuel strategy actually paid off.",
+    title: "Stint Analysis",
+    body: "Compare team stints side by side. Uses Garage61 Data.",
   },
   {
     href: "/race-analysis",
     index: "02",
     title: "Race Analysis",
-    tagline: "after the race",
-    body: "Drop in an iRacing lap chart for full-field pace, track position, stint timelines, and how your pace read against the field at every point of the race.",
+    body: "Full post-race analysis comparing all competitors. Currently restricted to iRacing Endurance Races.",
   },
 ];
 
@@ -30,8 +28,7 @@ export default function Home() {
           Engineer
         </h1>
         <p className="mt-5 max-w-[56ch] text-muted">
-          A pit-wall tool for iRacing endurance teams. Upload a session, get the pace, fuel and
-          strategy picture back. Everything is processed in your browser — nothing is uploaded.
+          {"Chaps Motorsport's Data Analysis & Telemetry Tool."}
         </p>
 
         <div className="mt-11 grid gap-3 sm:grid-cols-2">
@@ -42,7 +39,7 @@ export default function Home() {
               className="group flex flex-col rounded-md border border-line bg-panel p-6 transition-colors hover:border-amber hover:bg-panel2"
             >
               <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.28em] text-faint transition-colors group-hover:text-amber">
-                {entry.index} · {entry.tagline}
+                {entry.index}
               </div>
               <span className="font-display text-[26px] font-bold uppercase leading-none tracking-[0.03em] text-text">
                 {entry.title}

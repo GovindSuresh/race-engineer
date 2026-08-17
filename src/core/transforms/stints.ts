@@ -55,7 +55,7 @@ function buildStint(stintNumber: number, laps: LapRecord[]): Stint {
  *
  *  Requires laps enriched with Garage61 data (`pitIn`/`pitOut`/fuel) — the
  *  iRacing JSON alone has no pit-stop signal for arbitrary field cars, so
- *  this only works for the team's own car (Stint Planner's direct G61
+ *  this only works for the team's own car (Stint Analysis's direct G61
  *  upload, or Race Analysis after merging in the optional G61 upload).
  *
  *  `laps` must already be one driver's laps in ascending lapNumber order

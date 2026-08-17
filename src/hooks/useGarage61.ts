@@ -69,7 +69,7 @@ async function readError(response: Response): Promise<string> {
  *  between two rules. Hooks must be called unconditionally, so this one runs
  *  whether or not the Garage61 tab is showing — but the account flow is one of
  *  two run sources, and choosing the CSV one should cost no API calls at all.
- *  Without the gate, every load of the Stint Planner spent four upstream calls
+ *  Without the gate, every load of the Stint Analysis spent four upstream calls
  *  on data the user might never look at. Pass `false` and nothing is fetched. */
 export function useGarage61(enabled: boolean) {
   const [status, setStatus] = useState<Garage61ConnectionStatus>("checking");

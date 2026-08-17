@@ -87,7 +87,7 @@ function WouldDrop({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-/** The Stint Planner's single home for every control that decides which laps
+/** The Stint Analysis's single home for every control that decides which laps
  *  the analysis is built from: which runs are in scope, the rule-based filters,
  *  and individual laps ticked off by hand.
  *

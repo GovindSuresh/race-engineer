@@ -21,7 +21,7 @@ const KNOWN_LAP_FIELDS: ReadonlySet<string> = new Set([
   "driver", "car", "track", "season",
 ]);
 
-/** The fields the Stint Planner genuinely cannot work without. `fuelLevel`
+/** The fields the Stint Analysis genuinely cannot work without. `fuelLevel`
  *  and `fuelUsed` are here because `deriveStints` throws outright when they're
  *  undefined (see transforms/stints.ts) — everything else degrades quietly. */
 const LOAD_BEARING_FIELDS = [
@@ -153,7 +153,7 @@ export function garage61ApiLapToRow(lap: RawGarage61Lap): RawGarage61Row {
  *
  *  The API documents no ordering for `items`, and lap NUMBER alone is not a
  *  safe sort key — Garage61's own numbering restarts across runs, which is why
- *  the Stint Planner already refuses to key anything on it (see the note on
+ *  the Stint Analysis already refuses to key anything on it (see the note on
  *  `ProcessedDriver.rawTimeByLap`). `startTime` is the real ordering; lap
  *  number only breaks ties within the same timestamp. */
 export function sortGarage61ApiLaps(laps: RawGarage61Lap[]): RawGarage61Lap[] {
@@ -185,7 +185,7 @@ export function parseGarage61ApiLaps(payload: unknown): RawGarage61Lap[] {
   );
 }
 
-/** Parse → sort → narrow, in one call. What the Stint Planner actually uses. */
+/** Parse → sort → narrow, in one call. What the Stint Analysis actually uses. */
 export function garage61ApiLapsToRows(laps: RawGarage61Lap[]): RawGarage61Row[] {
   return sortGarage61ApiLaps(laps).map(garage61ApiLapToRow);
 }
