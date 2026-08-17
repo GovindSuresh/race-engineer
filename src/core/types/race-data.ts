@@ -269,7 +269,7 @@ export interface RawGarage61Row {
 // 1c. SOURCE TYPES — raw Garage61 REST API (GET /api/v1/laps)
 // ----------------------------------------------------------------------------
 //
-// The API is the Stint Planner's second Garage61 input, alongside the CSV
+// The API is the Stint Analysis's second Garage61 input, alongside the CSV
 // export above. Its lap object is a strict SUPERSET of the CSV's columns, so
 // `garage61ApiLapToRow` narrows it back to `RawGarage61Row` and everything
 // downstream (garage61OnlyToLapRecords → deriveStints → the UI) is shared.
@@ -338,7 +338,7 @@ export interface RawGarage61Lap {
   run?: number;
   // Identity of the session this lap belongs to. Together these are what
   // groups laps back into "one practice session" — the unit a single CSV
-  // export represents, and therefore one Stint Planner run slot.
+  // export represents, and therefore one Stint Analysis run slot.
   event?: string;
   session?: number;
   eventType?: number;        // 0 Unknown, 1 Race, 2 Practice, 3 Offline test,

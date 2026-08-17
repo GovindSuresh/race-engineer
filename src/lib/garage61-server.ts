@@ -122,7 +122,7 @@ export async function garage61Get<T>(
  *
  *  Garage61 gains a track or a car a handful of times a season, but the
  *  session picker asks for all three lists every time it mounts. Without this,
- *  simply opening the Stint Planner's account tab costs four upstream calls,
+ *  simply opening the Stint Analysis's account tab costs four upstream calls,
  *  and React Strict Mode doubles that in development by design. */
 export const REFERENCE_TTL_MS = 24 * 60 * 60 * 1000;
 

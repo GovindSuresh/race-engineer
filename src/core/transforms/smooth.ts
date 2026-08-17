@@ -20,7 +20,7 @@ function median(values: number[]): number {
  *  race rather than dropping those laps.
  *
  *  Only laps with a valid time (`lapTimeMs > 0`) participate — which is also
- *  how the Stint Planner's lap-exclusion feature and the clean-laps filter
+ *  how the Stint Analysis's lap-exclusion feature and the clean-laps filter
  *  keep excluded laps out of the trend, since both mark laps invalid. */
 export function computeSmoothedPace(laps: LapRecord[], halfWindow = 5): SmoothedPacePoint[] {
   const valid = laps

@@ -3,7 +3,7 @@ import { computeConditionsSummary } from "./conditions";
 import { computeAverageFuelBurnRate } from "./fuel";
 import { computeStintPaceTrend } from "./stint-pace-trend";
 
-/** One Stint Planner run, reduced to what a comparison needs. The page owns
+/** One Stint Analysis run, reduced to what a comparison needs. The page owns
  *  the run's identity (slot, label) and its filtered stints; everything below
  *  is derived from the stints alone. */
 export interface RunComparisonInput {

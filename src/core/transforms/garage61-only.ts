@@ -1,11 +1,11 @@
 import type { LapRecord, RawGarage61Row } from "../types/race-data";
 
-/** Promotes a standalone Garage61 upload (the Stint Planner path — no
+/** Promotes a standalone Garage61 upload (the Stint Analysis path — no
  *  iRacing merge, no full-field data) directly into LapRecords.
  *
  *  `label` fills `LapRecord.teamName`. Garage61 alone has no team name (or
  *  numeric driver id) at all, so the caller supplies something to identify
- *  this upload by — e.g. the uploaded filename — since Stint Planner
+ *  this upload by — e.g. the uploaded filename — since Stint Analysis
  *  compares up to 4 independent uploads side by side and needs some way to
  *  tell them apart. Fields iRacing would normally supply (custId,
  *  trackPositionAtLap, incident) are simply absent. */
