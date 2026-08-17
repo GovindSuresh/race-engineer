@@ -7,6 +7,7 @@ import {
   deriveStints,
   lapRuleContext,
   computeStintPaceTrend,
+  computeRunLapDeltas,
   computeFuelBurnRate,
   computeAverageFuelBurnRate,
   computeConditionsSummary,
@@ -48,6 +49,7 @@ import { Garage61SessionPicker } from "@/components/Garage61SessionPicker";
 import { runColor } from "@/components/charts/chart-theme";
 import { RunLapTimeChart, type RunLapTimeSeries } from "@/components/charts/RunLapTimeChart";
 import { RunPaceBoxplot } from "@/components/charts/RunPaceBoxplot";
+import { RunLapDeltaChart } from "@/components/charts/RunLapDeltaChart";
 import { RunComparisonTable } from "@/components/RunComparisonTable";
 
 const MAX_RUNS = 4;
@@ -168,6 +170,20 @@ interface ProcessedRun {
    *  recomputing them. */
   ruleContext: LapRuleContext;
   drivers: ProcessedDriver[];
+}
+
+/** Series identity for one driver within a run. Both charts that draw a line
+ *  per driver-run use these, so a legend entry means the same thing in each. */
+function runSeriesKey(slot: number, driverIndex: number): string {
+  return `run${slot}_driver${driverIndex}`;
+}
+
+/** Named after the run, qualified by driver only when the run had more than
+ *  one — a single-driver run reads "Run 1", not "Run 1 — Ada". */
+function runSeriesLabel(run: ProcessedRun, driver: ProcessedDriver): string {
+  return run.drivers.length > 1
+    ? `Run ${run.slot + 1} — ${driver.driverName}`
+    : `Run ${run.slot + 1}`;
 }
 
 function formatTrend(msPerLap: number | undefined): string {
@@ -508,7 +524,7 @@ export default function StintAnalysis() {
 
     for (const run of processedRuns) {
       run.drivers.forEach((driver, driverIndex) => {
-        const key = `run${run.slot}_driver${driverIndex}`;
+        const key = runSeriesKey(run.slot, driverIndex);
 
         // Which stint each lap belongs to, for the chart tooltip. Built here
         // rather than in the chart because the stint boundaries are already
@@ -517,10 +533,7 @@ export default function StintAnalysis() {
 
         series.push({
           key,
-          label:
-            run.drivers.length > 1
-              ? `Run ${run.slot + 1} — ${driver.driverName}`
-              : `Run ${run.slot + 1}`,
+          label: runSeriesLabel(run, driver),
           slot: run.slot,
           dashed: driverIndex > 0,
           stintByLap,
@@ -549,6 +562,25 @@ export default function StintAnalysis() {
 
     return { series, data, maxLap };
   }, [processedRuns]);
+
+  // The same driver-run series as the lap-time chart, re-expressed as a delta
+  // to the median of the runs at each lap. Fed from `stints` rather than
+  // `rawLaps` so it reflects the current selection, exactly like every other
+  // pace figure on the page.
+  const lapDeltaChart = useMemo(
+    () =>
+      computeRunLapDeltas(
+        processedRuns.flatMap((run) =>
+          run.drivers.map((driver, driverIndex) => ({
+            key: runSeriesKey(run.slot, driverIndex),
+            slot: run.slot,
+            label: runSeriesLabel(run, driver),
+            laps: driver.stints.flatMap((stint) => stint.laps),
+          })),
+        ),
+      ),
+    [processedRuns],
+  );
 
   // One run = one row, whatever its driver count: a run is the unit being
   // compared (a setup, a fuel load, a session), and splitting a driver-swap run
@@ -901,6 +933,26 @@ export default function StintAnalysis() {
               <Panel className="mt-5">
                 <PanelHeading title="Lap-time distribution" />
                 <RunPaceBoxplot distributions={runDistributions} />
+              </Panel>
+
+              <Panel className="mt-5">
+                <PanelHeading
+                  title="Lap-time delta"
+                  hint="Each run against the median of the loaded runs at the same lap. Zero moves lap by lap, so anything the runs did together — fuel burning off, the track rubbering in — cancels out and only the gap between them is left. With an odd number of runs the median IS one of them, so whichever run sits in the middle that lap reads exactly zero. Pit laps are always excluded here."
+                />
+                {lapDeltaChart.series.length > 0 ? (
+                  <RunLapDeltaChart
+                    series={lapDeltaChart.series}
+                    baseline={lapDeltaChart.baseline}
+                    maxLap={lapDeltaChart.maxLap}
+                  />
+                ) : (
+                  <p className="font-mono text-xs text-muted">
+                    {processedRuns.length < 2
+                      ? "Load a second run — this chart compares runs against each other."
+                      : "The loaded runs share no lap numbers, so there's nothing to compare lap for lap."}
+                  </p>
+                )}
               </Panel>
             </section>
 
