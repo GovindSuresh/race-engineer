@@ -3,12 +3,12 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, MONO, TOOLTIP, runColor } from "./chart-theme";
+import { AXIS, C, MONO, TOOLTIP, stintColor } from "./chart-theme";
 import { formatLapTime } from "@/lib/format";
-import type { RunLapDistribution } from "@/core";
+import type { UnitLapDistribution } from "@/core";
 
 export interface RunPaceBoxplotProps {
-  distributions: RunLapDistribution[];
+  distributions: UnitLapDistribution[];
 }
 
 interface OutlierPoint {
@@ -16,22 +16,27 @@ interface OutlierPoint {
   lapNumber: number;
 }
 
-function runHeading(run: RunLapDistribution | undefined): string {
-  if (!run) return "";
+function unitHeading(unit: UnitLapDistribution | undefined): string {
+  if (!unit) return "";
   return (
-    `<b>Run ${run.slot + 1}</b> ` +
-    `<span style="color:${C.faint}">${run.label}</span>`
+    `<b>${unit.name}</b> ` +
+    `<span style="color:${C.faint}">${unit.detail}</span>`
   );
 }
 
-/** Lap-time distribution, one box per run.
+/** Lap-time distribution, one box per comparison unit — a run or a stint,
+ *  depending on the page's mode.
  *
- *  The comparison table answers "which run was quicker on average"; this
- *  answers "which run could actually repeat it". Two runs can share a mean and
- *  look nothing alike — a tight box is a car the driver can lean on, a tall one
- *  is a lap they got right once. Outliers are drawn separately rather than
+ *  The comparison table answers "which was quicker on average"; this answers
+ *  "which could actually repeat it". Two units can share a mean and look
+ *  nothing alike — a tight box is a car the driver can lean on, a tall one is a
+ *  lap they got right once. Outliers are drawn separately rather than
  *  stretching the whiskers, so a single traffic-ruined lap doesn't disguise an
- *  otherwise consistent run. */
+ *  otherwise consistent stint.
+ *
+ *  This is the one chart in the set that needs no dash-pattern encoding to go
+ *  with `stintColor`'s shades: every box is named on the category axis, which
+ *  is already a direct label and a stronger identity channel than colour. */
 export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
   const option = useMemo<EChartsOption>(() => {
     const withData = distributions.filter((d) => d.box !== null);
@@ -59,12 +64,12 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
           if (p.seriesType === "scatter") {
             const point = outliers[p.dataIndex];
             if (!point) return "";
-            // Run, lap, time — nothing else. An outlier is a single lap, and
-            // the session name it belongs to is already on the axis and in the
+            // Unit, lap, time — nothing else. An outlier is a single lap, and
+            // the session it belongs to is already on the axis and in the
             // box's own tooltip.
             const run = withData[point.value[0]];
             return (
-              `<b>Run ${(run?.slot ?? 0) + 1}</b> ` +
+              `<b>${run?.name ?? ""}</b> ` +
               `<span style="color:${C.faint}">lap ${point.lapNumber}</span><br/>` +
               `<b>${formatLapTime(point.value[1] * 1000)}</b>`
             );
@@ -81,7 +86,7 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
             ["min", min],
           ];
           return (
-            `${runHeading(run)}<br/>` +
+            `${unitHeading(run)}<br/>` +
             rows
               .map(
                 ([name, value]) =>
@@ -95,11 +100,12 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
       },
       xAxis: {
         type: "category",
-        // "Run 1", not the run's descriptor — the axis matches how runs are
-        // labelled everywhere else (legend, swatches, table), and a date ·
-        // driver · car string would wrap or truncate under a narrow box. The
-        // descriptor is in the tooltip, where there's room for it.
-        data: withData.map((d) => `Run ${d.slot + 1}`),
+        // The unit's short name ("Run 1", "Stint 3"), not its descriptor —
+        // the axis matches how units are labelled everywhere else (legend,
+        // swatches, table), and a date · driver · car string would wrap or
+        // truncate under a narrow box. The detail is in the tooltip, where
+        // there's room for it.
+        data: withData.map((d) => d.name),
         ...AXIS,
         splitLine: { show: false },
         axisLabel: { ...AXIS.axisLabel, fontFamily: MONO },
@@ -113,15 +119,16 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
       series: [
         {
           type: "boxplot" as const,
-          // Colour follows the run slot, exactly as in every other run view.
+          // Hue by run, shade by stint — the same mapping every other
+          // surface uses, so a swatch means one thing across the page.
           itemStyle: { borderWidth: 1.5 },
           data: withData.map((dist) => ({
             value: (dist.box as [number, number, number, number, number]).map(
               (ms) => ms / 1000,
             ),
             itemStyle: {
-              borderColor: runColor(dist.slot),
-              color: `${runColor(dist.slot)}22`,
+              borderColor: stintColor(dist.runSlot, dist.stintIndex),
+              color: `${stintColor(dist.runSlot, dist.stintIndex)}22`,
             },
           })),
         },
@@ -141,7 +148,7 @@ export function RunPaceBoxplot({ distributions }: RunPaceBoxplotProps) {
     <EChart
       option={option}
       height={300}
-      ariaLabel="Lap-time distribution for each run, as a boxplot"
+      ariaLabel="Lap-time distribution for each compared run or stint, as a boxplot"
     />
   );
 }

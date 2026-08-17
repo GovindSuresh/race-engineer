@@ -3,22 +3,23 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
-import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, MONO, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, rowValue, runColor } from "./chart-theme";
+import { AXIS, C, GRID_BOTTOM_WITH_ZOOM, LEGEND, MONO, TOOLTIP, axisRows, dataZoom, lapCategoryAxis, rowValue, stintColor, stintDash } from "./chart-theme";
 import { formatLapTime } from "@/lib/format";
 
 export interface RunLapTimeSeries {
   /** Matches a key in each `data` row. */
   key: string;
-  /** Legend/tooltip label, e.g. "Run 1" or "Run 1 — Alex" when a run has
-   *  more than one driver. */
+  /** Legend/tooltip label, e.g. "Run 1" or "Stint 3". */
   label: string;
-  /** Run slot 0-3. Colour identity follows the RUN, not the driver or the
+  /** Run slot 0-3, carrying the hue. Colour identity follows the RUN, not the
    *  series' position in this list — stable even if a slot is cleared. */
   slot: number;
-  /** True for the 2nd+ driver within the same run — same hue as the run,
-   *  dashed to stay distinguishable without a second color dimension. */
-  dashed?: boolean;
-  /** Lap number -> stint number, for this series only.
+  /** Stint index within the run, carrying the shade and the dash pattern. 0
+   *  for a whole-run series, which is what keeps runs mode looking exactly as
+   *  it did before stint mode existed. */
+  stintIndex: number;
+  /** x -> stint number, for this series only. Omitted in stint mode, where
+   *  the series IS a stint and the annotation would only repeat its name.
    *
    *  Stints are shown in the tooltip rather than drawn on the chart because
    *  every run has its OWN boundaries on a shared lap axis: four runs' worth
@@ -36,9 +37,12 @@ export interface RunLapTimeChartProps {
    *  instead of ECharts rounding up to a "nice" number and leaving dead
    *  space to the right. */
   maxLap: number;
+  /** What the x-axis counts: session laps when comparing runs, laps into the
+   *  stint when comparing stints. */
+  xLabel: string;
 }
 
-export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) {
+export function RunLapTimeChart({ series, data, maxLap, xLabel }: RunLapTimeChartProps) {
   const option = useMemo<EChartsOption>(() => {
     const seriesByLabel = new Map(series.map((s) => [s.label, s]));
 
@@ -93,7 +97,7 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
               return `${r.marker ?? ""}${r.seriesName} <b>${formatLapTime(v * 1000)}</b>${stintTag}`;
             })
             .join("<br/>");
-          return `Lap ${lap}<br/>${body}`;
+          return `${xLabel} ${lap}<br/>${body}`;
         },
       },
       xAxis: lapCategoryAxis(maxLap),
@@ -112,12 +116,15 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
           type: "line" as const,
           showSymbol: false,
           connectNulls: false,
+          // Hue by run, shade AND dash pattern by stint. The dash is not
+          // decoration: two shades of one hue are only ΔE 7.4 apart, which is
+          // under the threshold at which colour alone tells them apart.
           lineStyle: {
-            color: runColor(s.slot),
+            color: stintColor(s.slot, s.stintIndex),
             width: 1.8,
-            type: s.dashed ? ("dashed" as const) : ("solid" as const),
+            type: stintDash(s.stintIndex),
           },
-          itemStyle: { color: runColor(s.slot) },
+          itemStyle: { color: stintColor(s.slot, s.stintIndex) },
           data: data.map((row) => [row.lapNumber, row[s.key]] as [number, number | null]),
 
           // A diamond on each stint's best counted lap, so a run reads as the
@@ -130,7 +137,7 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
                 symbol: "diamond",
                 symbolSize: 8,
                 itemStyle: {
-                  color: runColor(s.slot),
+                  color: stintColor(s.slot, s.stintIndex),
                   borderColor: C.panel,
                   borderWidth: 1.5,
                 },
@@ -170,13 +177,13 @@ export function RunLapTimeChart({ series, data, maxLap }: RunLapTimeChartProps) 
         };
       }),
     };
-  }, [series, data, maxLap]);
+  }, [series, data, maxLap, xLabel]);
 
   return (
     <EChart
       option={option}
       height={340}
-      ariaLabel="Lap times across the uploaded runs"
+      ariaLabel="Lap times across the compared runs or stints"
     />
   );
 }

@@ -1,22 +1,23 @@
 import type { ConditionsSummary, Stint } from "../types/race-data";
+import type { ComparisonUnit } from "./comparison-units";
 import { computeConditionsSummary } from "./conditions";
 import { computeAverageFuelBurnRate } from "./fuel";
 import { computeStintPaceTrend } from "./stint-pace-trend";
 
-/** One Stint Analysis run, reduced to what a comparison needs. The page owns
- *  the run's identity (slot, label) and its filtered stints; everything below
- *  is derived from the stints alone. */
-export interface RunComparisonInput {
-  slot: number;
-  label: string;
-  stints: Stint[];
-}
-
-/** Headline numbers for one run, all derived from the laps that survived the
- *  current filters — so the table always agrees with what the charts show. */
-export interface RunComparison {
-  slot: number;
-  label: string;
+/** Headline numbers for one comparison unit — a whole run or a single stint,
+ *  depending on the page's mode — all derived from the laps that survived the
+ *  current filters, so the table always agrees with what the charts show.
+ *
+ *  Nothing below knows which mode produced the unit: every figure is computed
+ *  from `unit.stints`, and a unit holding one stint is just the degenerate
+ *  case of a unit holding several. Two columns change meaning in that case and
+ *  are called out where they're defined (`paceTrendMsPerLap`, `conditions`). */
+export interface ComparisonRow {
+  key: string;
+  name: string;
+  detail: string;
+  runSlot: number;
+  stintIndex: number;
   stintCount: number;
   /** Timed laps counted. Laps with no time (`lapTimeMs <= 0`) are excluded
    *  everywhere here, since averaging a zero would drag every figure down. */
@@ -37,19 +38,37 @@ export interface RunComparison {
   fuelAddedTotal: number | null;
   /** Mean of the per-stint pace trends (ms/lap, positive = getting slower).
    *  Averaged across stints rather than fitted across the whole run, because
-   *  a run-wide fit would read the fuel-load reset at every stop as pace. */
+   *  a run-wide fit would read the fuel-load reset at every stop as pace.
+   *
+   *  In stint mode a unit holds one stint, so the mean is over one value —
+   *  this becomes that stint's own fit, which is the stronger reading of the
+   *  two and the reason stint mode is worth having. */
   paceTrendMsPerLap: number | null;
   /** Track and weather conditions over the same laps every figure above is
-   *  built from, or null when the run carries no weather data (an
-   *  iRacing-only source).
+   *  built from, or null when the unit carries no weather data (an
+   *  iRacing-only source). In stint mode this describes the one stint, so two
+   *  stints of the same run can report genuinely different conditions.
    *
    *  It sits on the comparison rather than beside it because conditions are
    *  the first thing that invalidates one: two runs half a second apart on a
    *  track 8°C different aren't a setup result, and a table that shows the
    *  half second without the 8°C invites exactly that conclusion. Deliberately
-   *  computed from the FILTERED laps, like every other column, so a run
+   *  computed from the FILTERED laps, like every other column, so a unit
    *  narrowed to its clean laps reports the conditions of those laps. */
   conditions: ConditionsSummary | null;
+}
+
+/** Identity and appearance pass straight through from the unit; every other
+ *  column is derived. Kept in one helper so the table and the boxplot can't
+ *  drift apart on what a series is called or coloured. */
+function identity(unit: ComparisonUnit) {
+  return {
+    key: unit.key,
+    name: unit.name,
+    detail: unit.detail,
+    runSlot: unit.runSlot,
+    stintIndex: unit.stintIndex,
+  };
 }
 
 function timedLapTimes(stints: Stint[]): number[] {
@@ -77,8 +96,8 @@ function quantile(sorted: number[], q: number): number {
   return next === undefined ? sorted[base] : sorted[base] + rest * (next - sorted[base]);
 }
 
-export function computeRunComparison(runs: RunComparisonInput[]): RunComparison[] {
-  return runs.map((run) => {
+export function computeComparison(units: ComparisonUnit[]): ComparisonRow[] {
+  return units.map((run) => {
     const times = timedLapTimes(run.stints).sort((a, b) => a - b);
     const count = times.length;
 
@@ -102,8 +121,7 @@ export function computeRunComparison(runs: RunComparisonInput[]): RunComparison[
       .filter((trend): trend is number => trend !== undefined);
 
     return {
-      slot: run.slot,
-      label: run.label,
+      ...identity(run),
       stintCount: run.stints.length,
       lapCount: count,
       bestLapTimeMs: count > 0 ? times[0] : null,
@@ -120,13 +138,16 @@ export function computeRunComparison(runs: RunComparisonInput[]): RunComparison[
   });
 }
 
-/** Five-number summary plus outliers for one run, ready for an ECharts
+/** Five-number summary plus outliers for one unit, ready for an ECharts
  *  boxplot. Whiskers use Tukey's 1.5×IQR rule, so a single scruffy lap stops
  *  stretching the whisker and shows up as the outlier it is — which is the
  *  whole reason to draw a boxplot next to a table of averages. */
-export interface RunLapDistribution {
-  slot: number;
-  label: string;
+export interface UnitLapDistribution {
+  key: string;
+  name: string;
+  detail: string;
+  runSlot: number;
+  stintIndex: number;
   /** [min, Q1, median, Q3, max] in ms, the order ECharts' boxplot expects. */
   box: [number, number, number, number, number] | null;
   /** Lap times beyond the whiskers, in ms, paired with their lap numbers so
@@ -134,17 +155,19 @@ export interface RunLapDistribution {
   outliers: { lapNumber: number; lapTimeMs: number }[];
 }
 
-export function computeRunLapDistributions(
-  runs: RunComparisonInput[],
-): RunLapDistribution[] {
-  return runs.map((run) => {
+export function computeLapDistributions(
+  units: ComparisonUnit[],
+): UnitLapDistribution[] {
+  return units.map((run) => {
     const timed = run.stints
       .flatMap((stint) => stint.laps)
       .filter((lap) => lap.lapTimeMs > 0)
       .map((lap) => ({ lapNumber: lap.lapNumber, lapTimeMs: lap.lapTimeMs }));
 
+    const id = identity(run);
+
     if (timed.length === 0) {
-      return { slot: run.slot, label: run.label, box: null, outliers: [] };
+      return { ...id, box: null, outliers: [] };
     }
 
     const sorted = timed.map((lap) => lap.lapTimeMs).sort((a, b) => a - b);
@@ -161,8 +184,7 @@ export function computeRunLapDistributions(
     );
 
     return {
-      slot: run.slot,
-      label: run.label,
+      ...id,
       box: [
         inside.length > 0 ? inside[0] : sorted[0],
         q1,

@@ -7,18 +7,25 @@ import {
   deriveStints,
   lapRuleContext,
   computeStintPaceTrend,
-  computeRunLapDeltas,
+  computeLapDeltas,
   computeFuelBurnRate,
   computeAverageFuelBurnRate,
   computeConditionsSummary,
   computeMeanTrackTempC,
-  computeRunComparison,
-  computeRunLapDistributions,
+  computeComparison,
+  computeLapDistributions,
+  buildComparisonUnits,
+  defaultStintSelection,
+  listStintCandidates,
+  stintKey,
   garage61OnlyToLapRecords,
   lapRuleMatches,
   parseGarage61Csv,
   garage61SessionTypeLabel,
   LAP_FILTER_KEYS,
+  type ComparisonMode,
+  type ComparisonSource,
+  type DeltaAlign,
   type Garage61Session,
   type LapFilterKey,
   type LapFilters,
@@ -46,11 +53,12 @@ import { useScrolledPast } from "@/hooks/useScrolledPast";
 import { useGarage61 } from "@/hooks/useGarage61";
 import { Garage61ConnectPanel } from "@/components/Garage61ConnectPanel";
 import { Garage61SessionPicker } from "@/components/Garage61SessionPicker";
-import { runColor } from "@/components/charts/chart-theme";
+import { runColor, stintColor } from "@/components/charts/chart-theme";
 import { RunLapTimeChart, type RunLapTimeSeries } from "@/components/charts/RunLapTimeChart";
 import { RunPaceBoxplot } from "@/components/charts/RunPaceBoxplot";
 import { RunLapDeltaChart } from "@/components/charts/RunLapDeltaChart";
 import { RunComparisonTable } from "@/components/RunComparisonTable";
+import { ComparisonModeBar } from "@/components/ComparisonModeBar";
 
 const MAX_RUNS = 4;
 
@@ -172,20 +180,6 @@ interface ProcessedRun {
   drivers: ProcessedDriver[];
 }
 
-/** Series identity for one driver within a run. Both charts that draw a line
- *  per driver-run use these, so a legend entry means the same thing in each. */
-function runSeriesKey(slot: number, driverIndex: number): string {
-  return `run${slot}_driver${driverIndex}`;
-}
-
-/** Named after the run, qualified by driver only when the run had more than
- *  one — a single-driver run reads "Run 1", not "Run 1 — Ada". */
-function runSeriesLabel(run: ProcessedRun, driver: ProcessedDriver): string {
-  return run.drivers.length > 1
-    ? `Run ${run.slot + 1} — ${driver.driverName}`
-    : `Run ${run.slot + 1}`;
-}
-
 function formatTrend(msPerLap: number | undefined): string {
   if (msPerLap === undefined) return "n/a";
   const secPerLap = msPerLap / 1000;
@@ -197,9 +191,6 @@ function exclusionKey(slot: number, driverName: string): string {
   return `${slot}:${driverName}`;
 }
 
-function stintKey(slot: number, driverName: string, stintNumber: number): string {
-  return `${slot}:${driverName}:${stintNumber}`;
-}
 
 export default function StintAnalysis() {
   const [runs, setRuns] = useState<(RunData | null)[]>(Array(MAX_RUNS).fill(null));
@@ -214,10 +205,22 @@ export default function StintAnalysis() {
   const [excludedLaps, setExcludedLaps] = useState<Record<string, Set<number>>>({});
   const [expandedStints, setExpandedStints] = useState<Set<string>>(new Set());
   const [hiddenRuns, setHiddenRuns] = useState<Set<number>>(new Set());
-  /** Run the comparison table measures the others against, or null for
+  /** Unit the comparison table measures the others against, or null for
    *  absolute figures. Held here rather than in the table so the choice
    *  survives the table re-rendering when a filter changes. */
-  const [baselineSlot, setBaselineSlot] = useState<number | null>(null);
+  const [baselineKey, setBaselineKey] = useState<string | null>(null);
+  /** What the analysis section compares — runs against each other, or stints
+   *  against each other.
+   *
+   *  Null means "no explicit choice yet", NOT a default: the effective mode is
+   *  derived below from how many runs are visible. Storing only the override
+   *  is what lets the default keep tracking the loaded runs — a user who loads
+   *  a second run gets run comparison without having to ask for it, and one
+   *  who picked a mode keeps it. */
+  const [modeOverride, setModeOverride] = useState<ComparisonMode | null>(null);
+  /** Stints ticked for comparison, or null for "whatever the default is".
+   *  Same reason as `modeOverride`: an untouched selection follows the runs. */
+  const [stintOverride, setStintOverride] = useState<Set<string> | null>(null);
   // `dropFinalLap` defaults ON: quitting out during the final stop is the
   // normal way a practice run ends, so the part-lap it leaves behind is noise
   // far more often than it's data. `dropOpeningLap` defaults ON for the mirror
@@ -423,9 +426,78 @@ export default function StintAnalysis() {
     });
   }, [runs, excludedLaps, hiddenRuns, filters]);
 
+  // The neutral shape /core compares. One run = one entry whatever its driver
+  // count: a run is a session, and how it splits into stints is decided in
+  // `buildComparisonUnits`, not here.
+  const comparisonSources = useMemo<ComparisonSource[]>(
+    () =>
+      processedRuns.map((run) => ({
+        slot: run.slot,
+        descriptor: run.descriptor,
+        drivers: run.drivers.map((driver) => ({
+          driverName: driver.driverName,
+          stints: driver.stints,
+        })),
+      })),
+    [processedRuns],
+  );
+
+  // Effective mode: the user's choice if they made one, otherwise derived from
+  // what's loaded. A single run has nothing to compare itself against, so run
+  // mode would show one row and an empty delta chart — stint mode is the only
+  // reading of a solo session that says anything.
+  const mode: ComparisonMode =
+    modeOverride ?? (comparisonSources.length === 1 ? "stints" : "runs");
+
+  const stintCandidates = useMemo(
+    () => listStintCandidates(comparisonSources),
+    [comparisonSources],
+  );
+
+  // Same derived-default pattern. Recomputed from the visible runs each time,
+  // so loading or hiding a run moves the default with it; once the user ticks
+  // anything, their set wins and stale keys are dropped by the builder.
+  const selectedStints = useMemo(
+    () => stintOverride ?? defaultStintSelection(comparisonSources),
+    [stintOverride, comparisonSources],
+  );
+
+  /** Where a hand-picked lap sits in the stint structure, so a chip can name
+   *  and colour itself the way the charts do. Keyed the same way the hand-pick
+   *  set itself is — by lap NUMBER — so a run whose lap numbers restart maps
+   *  the later stint's lap. That's the same limit the hand-pick mechanism
+   *  already has (it stores lap numbers, not lap identities), not a new one. */
+  const stintByPickedLap = useMemo(() => {
+    const index = new Map<string, { label: string; color: string }>();
+    for (const run of processedRuns) {
+      for (const candidate of listStintCandidates([
+        {
+          slot: run.slot,
+          descriptor: run.descriptor,
+          drivers: run.drivers.map((d) => ({ driverName: d.driverName, stints: d.stints })),
+        },
+      ])) {
+        const driver = run.drivers.find((d) => d.driverName === candidate.driverName);
+        const stint = driver?.stints.find((s) => s.stintNumber === candidate.stintNumber);
+        for (const lap of stint?.laps ?? []) {
+          index.set(`${run.slot}:${candidate.driverName}:${lap.lapNumber}`, {
+            label: `S${candidate.stintNumber}`,
+            color: stintColor(candidate.runSlot, candidate.stintIndex),
+          });
+        }
+      }
+    }
+    return index;
+  }, [processedRuns]);
+
   // What the Lap Selection block reports: the lap counts, and every hand-pick as a
   // removable chip. `handPickIndex` maps a chip's key back to its coordinates
   // so removal doesn't have to parse the key string apart.
+  //
+  // In stint mode both are narrowed to the stints actually being compared, so
+  // the panel describes what's on the charts rather than everything loaded —
+  // "126 of 135" while three of nine stints are plotted is a number about
+  // nothing the user can see.
   const selection = useMemo(() => {
     const scope: RunLapSelection[] = [];
     const handPicks: HandPickOption[] = [];
@@ -434,14 +506,41 @@ export default function StintAnalysis() {
       { slot: number; driverName: string; lapNumber: number }
     >();
 
+    // Lap numbers in scope per driver — everything in runs mode, only the
+    // selected stints' laps in stint mode.
+    const inScope = new Map<string, Set<number>>();
+    if (mode === "stints") {
+      for (const run of processedRuns) {
+        for (const driver of run.drivers) {
+          const numbers = new Set<number>();
+          for (const stint of driver.stints) {
+            if (!selectedStints.has(stintKey(run.slot, driver.driverName, stint.stintNumber)))
+              continue;
+            for (const lap of stint.laps) numbers.add(lap.lapNumber);
+          }
+          inScope.set(exclusionKey(run.slot, driver.driverName), numbers);
+        }
+      }
+    }
+
     runs.forEach((run, slot) => {
       if (!run || hiddenRuns.has(slot)) return;
 
+      const drivers = run.drivers.map((driver) => {
+        const key = exclusionKey(slot, driver.driverName);
+        const numbers = inScope.get(key);
+        return {
+          laps: numbers ? driver.laps.filter((lap) => numbers.has(lap.lapNumber)) : driver.laps,
+          excludedLapNumbers: excludedLaps[key],
+        };
+      });
+
       scope.push({
-        drivers: run.drivers.map((driver) => ({
-          laps: driver.laps,
-          excludedLapNumbers: excludedLaps[exclusionKey(slot, driver.driverName)],
-        })),
+        drivers,
+        // The whole run's context even when `drivers` is narrowed, so
+        // dropFinalLap keeps meaning "the session's last lap". See
+        // `RunLapSelection.context`.
+        context: lapRuleContext({ drivers: run.drivers.map((d) => ({ laps: d.laps })) }),
       });
 
       // The driver name only earns its space on a shared run — on a solo run
@@ -450,14 +549,22 @@ export default function StintAnalysis() {
       for (const driver of run.drivers) {
         const excluded = excludedLaps[exclusionKey(slot, driver.driverName)];
         if (!excluded) continue;
+        // Deliberately NOT narrowed to the compared stints, unlike the counts
+        // and the picker: a chip is the only way to undo a hand-pick, and
+        // removing every lap of a stint takes that stint out of the comparison
+        // — so scoping the chips would hide the undo for exactly the action
+        // that needs it most. A lap whose stint has gone falls back to the run
+        // label, which is the honest thing to show.
         for (const lapNumber of [...excluded].sort((a, b) => a - b)) {
           const key = `${slot}:${driver.driverName}:${lapNumber}`;
+          const stint = mode === "stints" ? stintByPickedLap.get(key) : undefined;
+          const where = stint?.label ?? `R${slot + 1}`;
           handPicks.push({
             key,
             label: namePerChip
-              ? `R${slot + 1} ${driver.driverName} L${lapNumber}`
-              : `R${slot + 1} L${lapNumber}`,
-            color: runColor(slot),
+              ? `${where} ${driver.driverName} L${lapNumber}`
+              : `${where} L${lapNumber}`,
+            color: stint?.color ?? runColor(slot),
           });
           handPickIndex.set(key, { slot, driverName: driver.driverName, lapNumber });
         }
@@ -465,19 +572,36 @@ export default function StintAnalysis() {
     });
 
     return { counts: countLapSelection(scope, filters), handPicks, handPickIndex };
-  }, [runs, hiddenRuns, excludedLaps, filters]);
+  }, [
+    runs,
+    hiddenRuns,
+    excludedLaps,
+    filters,
+    mode,
+    processedRuns,
+    selectedStints,
+    stintByPickedLap,
+  ]);
 
   // The run → driver → stint → lap tree the Lap Selection picker renders. Built from
   // `processedRuns` so the stint grouping is identical to the stint explorer's,
   // but each lap's TIME comes from `rawTimeByLap`: a dropped lap has its time
   // blanked to -1 in `stint.laps`, and the picker has to show the real time for
   // you to decide whether to restore it.
+  //
+  // In stint mode it shows only the stints being compared, so the laps you can
+  // reach are the laps that affect what's on screen. Everything else is one
+  // chip-click away in the mode bar above.
   const pickerRuns = useMemo<PickerRun[]>(() => {
-    return processedRuns.map((run) => {
+    return processedRuns.flatMap((run) => {
       const drivers = run.drivers.map((driver) => {
         const excluded = excludedLaps[exclusionKey(run.slot, driver.driverName)];
 
-        const stints = driver.stints.map((stint) => {
+        const inComparison = (stint: Stint) =>
+          mode === "runs" ||
+          selectedStints.has(stintKey(run.slot, driver.driverName, stint.stintNumber));
+
+        const stints = driver.stints.filter(inComparison).map((stint) => {
           const laps = stint.laps.map((lap) => {
             // Every field except lapTimeMs survives filtering untouched, so the
             // rule check can read the filtered lap directly.
@@ -504,51 +628,66 @@ export default function StintAnalysis() {
         return { driverName: driver.driverName, stints };
       });
 
-      return {
-        slot: run.slot,
-        label: `Run ${run.slot + 1}`,
-        sourceLabel: run.label,
-        color: runColor(run.slot),
-        handDroppedCount: drivers.reduce(
-          (sum, d) => sum + d.stints.reduce((s, st) => s + st.handDroppedCount, 0),
-          0,
-        ),
-        drivers,
-      };
+      // A run with no stint in the comparison isn't a row at all, rather than
+      // an empty expandable one.
+      if (drivers.every((d) => d.stints.length === 0)) return [];
+
+      return [
+        {
+          slot: run.slot,
+          label: `Run ${run.slot + 1}`,
+          sourceLabel: run.label,
+          color: runColor(run.slot),
+          handDroppedCount: drivers.reduce(
+            (sum, d) => sum + d.stints.reduce((s, st) => s + st.handDroppedCount, 0),
+            0,
+          ),
+          drivers,
+        },
+      ];
     });
-  }, [processedRuns, excludedLaps, filters]);
+  }, [processedRuns, excludedLaps, filters, mode, selectedStints]);
+
+  const comparisonUnits = useMemo(
+    () => buildComparisonUnits(comparisonSources, mode, selectedStints),
+    [comparisonSources, mode, selectedStints],
+  );
+
+  // Stints occupy disjoint lap-number ranges, so comparing them on the session
+  // lap number would never line two up. See `DeltaAlign`.
+  const align: DeltaAlign = mode === "stints" ? "lapInStint" : "lapNumber";
 
   const lapTimeChart = useMemo(() => {
     const series: RunLapTimeSeries[] = [];
     const rowsByLap = new Map<number, { lapNumber: number } & Record<string, number | null>>();
 
-    for (const run of processedRuns) {
-      run.drivers.forEach((driver, driverIndex) => {
-        const key = runSeriesKey(run.slot, driverIndex);
+    for (const unit of comparisonUnits) {
+      // Only meaningful in runs mode, where a unit spans several stints. In
+      // stint mode the series IS a stint, so annotating every point with the
+      // stint it belongs to would just repeat the series name.
+      const stintByLap: Record<number, number> | undefined =
+        mode === "runs" ? {} : undefined;
 
-        // Which stint each lap belongs to, for the chart tooltip. Built here
-        // rather than in the chart because the stint boundaries are already
-        // known — the chart only ever sees a flat list of lap times.
-        const stintByLap: Record<number, number> = {};
-
-        series.push({
-          key,
-          label: runSeriesLabel(run, driver),
-          slot: run.slot,
-          dashed: driverIndex > 0,
-          stintByLap,
-        });
-
-        for (const stint of driver.stints) {
-          for (const lap of stint.laps) {
-            if (lap.lapTimeMs <= 0) continue;
-            stintByLap[lap.lapNumber] = stint.stintNumber;
-            if (!rowsByLap.has(lap.lapNumber))
-              rowsByLap.set(lap.lapNumber, { lapNumber: lap.lapNumber });
-            rowsByLap.get(lap.lapNumber)![key] = lap.lapTimeMs / 1000;
-          }
-        }
+      series.push({
+        key: unit.key,
+        label: unit.name,
+        slot: unit.runSlot,
+        stintIndex: unit.stintIndex,
+        stintByLap,
       });
+
+      for (const stint of unit.stints) {
+        stint.laps.forEach((lap, lapIndex) => {
+          if (lap.lapTimeMs <= 0) return;
+          // x is the lap number when comparing runs, the lap's position in its
+          // stint when comparing stints — counted over the laps as driven, so
+          // a filtered lap leaves a hole rather than sliding the rest forward.
+          const x = mode === "stints" ? lapIndex + 1 : lap.lapNumber;
+          if (stintByLap) stintByLap[x] = stint.stintNumber;
+          if (!rowsByLap.has(x)) rowsByLap.set(x, { lapNumber: x });
+          rowsByLap.get(x)![unit.key] = lap.lapTimeMs / 1000;
+        });
+      }
     }
 
     const data = [...rowsByLap.values()].sort((a, b) => a.lapNumber - b.lapNumber);
@@ -556,53 +695,64 @@ export default function StintAnalysis() {
       for (const s of series) if (!(s.key in row)) row[s.key] = null;
     }
 
-    // Axis end = the furthest lap any visible run reached, so the axis doesn't
-    // run on past the data into empty space.
+    // Axis end = the furthest point any visible unit reached, so the axis
+    // doesn't run on past the data into empty space.
     const maxLap = data.reduce((m, row) => Math.max(m, row.lapNumber), 1);
 
     return { series, data, maxLap };
-  }, [processedRuns]);
+  }, [comparisonUnits, mode]);
 
-  // The same driver-run series as the lap-time chart, re-expressed as a delta
-  // to the median of the runs at each lap. Fed from `stints` rather than
-  // `rawLaps` so it reflects the current selection, exactly like every other
-  // pace figure on the page.
+  // The same series, re-expressed as a delta to the median of the others at
+  // each point. Fed from `stints` rather than `rawLaps` so it reflects the
+  // current selection, exactly like every other pace figure on the page.
   const lapDeltaChart = useMemo(
-    () =>
-      computeRunLapDeltas(
-        processedRuns.flatMap((run) =>
-          run.drivers.map((driver, driverIndex) => ({
-            key: runSeriesKey(run.slot, driverIndex),
-            slot: run.slot,
-            label: runSeriesLabel(run, driver),
-            laps: driver.stints.flatMap((stint) => stint.laps),
-          })),
-        ),
-      ),
-    [processedRuns],
-  );
-
-  // One run = one row, whatever its driver count: a run is the unit being
-  // compared (a setup, a fuel load, a session), and splitting a driver-swap run
-  // into two rows would compare stints, not runs.
-  const comparisonInputs = useMemo(
-    () =>
-      processedRuns.map((run) => ({
-        slot: run.slot,
-        label: run.descriptor,
-        stints: run.drivers.flatMap((driver) => driver.stints),
-      })),
-    [processedRuns],
+    () => computeLapDeltas(comparisonUnits, align),
+    [comparisonUnits, align],
   );
 
   const runComparison = useMemo(
-    () => computeRunComparison(comparisonInputs),
-    [comparisonInputs],
+    () => computeComparison(comparisonUnits),
+    [comparisonUnits],
   );
   const runDistributions = useMemo(
-    () => computeRunLapDistributions(comparisonInputs),
-    [comparisonInputs],
+    () => computeLapDistributions(comparisonUnits),
+    [comparisonUnits],
   );
+
+  // Wording that follows the mode. Kept together so a new surface can't
+  // describe a stint as a run by picking the label up from the wrong place.
+  const unitNoun = mode === "stints" ? "stint" : "run";
+  const xLabel = mode === "stints" ? "Stint lap" : "Lap";
+
+  function changeMode(next: ComparisonMode) {
+    setModeOverride(next);
+    // A stint key means nothing to a table of runs, and vice versa — leaving it
+    // set would silently show absolute figures where a delta was expected.
+    setBaselineKey(null);
+  }
+
+  function toggleStint(key: string) {
+    // Materialises the derived default on first touch: from here the user's
+    // set is the selection, and it stops following the loaded runs.
+    setStintOverride((prev) => {
+      const next = new Set(prev ?? selectedStints);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setBaselineKey((prev) => (prev === key ? null : prev));
+  }
+
+  function selectRunStints(slot: number) {
+    setStintOverride(
+      new Set(
+        stintCandidates
+          .filter((candidate) => candidate.runSlot === slot)
+          .map((candidate) => candidate.key),
+      ),
+    );
+    setBaselineKey(null);
+  }
 
   const hasAnyRun = loadedSlots.length > 0;
   const showSelectionBar = hasAnyRun && scrolledPastSelection;
@@ -791,7 +941,23 @@ export default function StintAnalysis() {
           >
             <SectionHeading
               title="Lap Selection"
-              note="Configuration, not analysis: three ways of narrowing the data — which runs are in scope, the rules applied to every lap, and individual laps ticked off by hand. Nothing here changes the underlying files. Pit-stop boundaries, fuel and weather always come from the full lap set, so a dropped lap only stops counting towards pace."
+              note={
+                <>
+                  Configuration, not analysis: three ways of narrowing the data — which
+                  runs are in scope, the rules applied to every lap, and individual laps
+                  ticked off by hand. Nothing here changes the underlying files. Pit-stop
+                  boundaries, fuel and weather always come from the full lap set, so a
+                  dropped lap only stops counting towards pace.
+                  {mode === "stints" && (
+                    <>
+                      {" "}
+                      While you&rsquo;re comparing stints, the counts and the lap picker
+                      cover just the stints on the charts — tick a different stint in{" "}
+                      <b className="text-muted">Compare</b> below to reach its laps.
+                    </>
+                  )}
+                </>
+              }
             />
             <div className="mt-3.5">{selectionPanel}</div>
           </section>
@@ -808,10 +974,24 @@ export default function StintAnalysis() {
             {/* The rule marks where configuration ends and analysis begins —
                 every section below reads from the selection above. The eyebrow
                 labels that boundary once, rather than each section repeating a
-                compressed version of its own title. */}
+                compressed version of its own title.
+
+                The mode bar sits directly under it because it re-frames every
+                section below at once, rather than belonging to any one. */}
             <section className="mt-10 border-t border-line pt-10">
+              <ComparisonModeBar
+                mode={mode}
+                onModeChange={changeMode}
+                candidates={stintCandidates}
+                selected={selectedStints}
+                onToggleStint={toggleStint}
+                onSelectRun={selectRunStints}
+              />
+            </section>
+
+            <section className="mt-9">
               <SectionHeading
-                eyebrow="/// Run Analysis"
+                eyebrow="/// Analysis"
                 title="Overview"
                 note={
                   <>
@@ -893,6 +1073,13 @@ export default function StintAnalysis() {
                 title="Lap times"
                 note={
                   <>
+                    {mode === "stints" && (
+                      <>
+                        Each stint starts again at lap 1, so they lie on top of each other
+                        on a common fuel load and tyre age rather than side by side across
+                        the session.{" "}
+                      </>
+                    )}
                     Dropped laps are left out of the line entirely rather than plotted as a
                     spike, so the y-axis stays scaled to real running pace — a gap in a line
                     is a dropped lap. Hover over laps for more details.
@@ -904,6 +1091,7 @@ export default function StintAnalysis() {
                   series={lapTimeChart.series}
                   data={lapTimeChart.data}
                   maxLap={lapTimeChart.maxLap}
+                  xLabel={xLabel}
                 />
               </Panel>
             </section>
@@ -913,11 +1101,11 @@ export default function StintAnalysis() {
                 title="Variance & Trends"
                 note={
                   <>
-                    Compare the runs in more detail.
-                    Selecting a run in the selection box to compare against will convert
-                    the other runs to deltas from it.{" "}
+                    Compare the {unitNoun}s in more detail. Selecting one in the selection
+                    box to compare against will convert the others to deltas from it.{" "}
                     <b className="text-muted">Spread</b> is the standard deviation of lap
-                    times. Pace trend is the lap-time slope within the stint.
+                    times. Pace trend is the lap-time slope within the stint
+                    {mode === "runs" && ", averaged across the run's stints"}.
                   </>
                 }
               />
@@ -925,8 +1113,10 @@ export default function StintAnalysis() {
               <Panel className="mt-3.5">
                 <RunComparisonTable
                   runs={runComparison}
-                  baselineSlot={baselineSlot}
-                  onBaselineChange={setBaselineSlot}
+                  baselineKey={baselineKey}
+                  onBaselineChange={setBaselineKey}
+                  unitLabel={mode === "stints" ? "Stint" : "Run"}
+                  detailLabel={mode === "stints" ? "Laps" : "Session"}
                 />
               </Panel>
 
@@ -938,19 +1128,25 @@ export default function StintAnalysis() {
               <Panel className="mt-5">
                 <PanelHeading
                   title="Lap-time delta"
-                  hint="Each run against the median of the loaded runs at the same lap. Zero moves lap by lap, so anything the runs did together — fuel burning off, the track rubbering in — cancels out and only the gap between them is left. With an odd number of runs the median IS one of them, so whichever run sits in the middle that lap reads exactly zero. Pit laps are always excluded here."
+                  hint={
+                    mode === "stints"
+                      ? "Each stint against the median of the selected stints at the same lap into the stint. Zero moves lap by lap, so anything the stints did together — fuel burning off, the tyres coming in — cancels out and only the gap between them is left. With an odd number of stints the median IS one of them, so whichever stint sits in the middle that lap reads exactly zero. Pit laps are always excluded here."
+                      : "Each run against the median of the loaded runs at the same lap. Zero moves lap by lap, so anything the runs did together — fuel burning off, the track rubbering in — cancels out and only the gap between them is left. With an odd number of runs the median IS one of them, so whichever run sits in the middle that lap reads exactly zero. Pit laps are always excluded here."
+                  }
                 />
                 {lapDeltaChart.series.length > 0 ? (
                   <RunLapDeltaChart
                     series={lapDeltaChart.series}
                     baseline={lapDeltaChart.baseline}
-                    maxLap={lapDeltaChart.maxLap}
+                    maxX={lapDeltaChart.maxX}
+                    xLabel={xLabel}
+                    unitNoun={unitNoun}
                   />
                 ) : (
                   <p className="font-mono text-xs text-muted">
-                    {processedRuns.length < 2
-                      ? "Load a second run — this chart compares runs against each other."
-                      : "The loaded runs share no lap numbers, so there's nothing to compare lap for lap."}
+                    {comparisonUnits.length < 2
+                      ? `Pick at least two ${unitNoun}s to compare \u2014 this chart measures them against each other.`
+                      : `The compared ${unitNoun}s overlap nowhere, so there's nothing to line up lap for lap.`}
                   </p>
                 )}
               </Panel>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LapRecord, Stint } from "../types/race-data";
-import { computeRunComparison, computeRunLapDistributions } from "./run-comparison";
+import { computeComparison, computeLapDistributions } from "./comparison";
+import type { ComparisonUnit } from "./comparison-units";
 
 function lap(lapNumber: number, lapTimeMs: number, fuelUsed?: number): LapRecord {
   return {
@@ -31,12 +32,17 @@ function stint(stintNumber: number, laps: LapRecord[], fuelAdded?: number): Stin
   };
 }
 
-describe("computeRunComparison", () => {
+/** The identity half of a `ComparisonUnit`. Every figure under test is derived
+ *  from `stints` alone, so these fields only need to be distinct. */
+function id(slot: number, name: string): Omit<ComparisonUnit, "stints"> {
+  return { key: `run${slot}`, name, detail: name, runSlot: slot, stintIndex: 0 };
+}
+
+describe("computeComparison", () => {
   it("summarises a run from its stints", () => {
-    const [run] = computeRunComparison([
+    const [run] = computeComparison([
       {
-        slot: 0,
-        label: "Run 1",
+        ...id(0, "Run 1"),
         stints: [stint(1, [lap(1, 100_000), lap(2, 102_000), lap(3, 104_000)], 50)],
       },
     ]);
@@ -50,8 +56,8 @@ describe("computeRunComparison", () => {
   });
 
   it("excludes untimed laps rather than averaging a zero", () => {
-    const [run] = computeRunComparison([
-      { slot: 0, label: "Run 1", stints: [stint(1, [lap(1, 100_000), lap(2, 0), lap(3, 104_000)])] },
+    const [run] = computeComparison([
+      { ...id(0, "Run 1"), stints: [stint(1, [lap(1, 100_000), lap(2, 0), lap(3, 104_000)])] },
     ]);
 
     expect(run.lapCount).toBe(2);
@@ -60,15 +66,13 @@ describe("computeRunComparison", () => {
   });
 
   it("measures spread, so a consistent run is distinguishable from a lucky one", () => {
-    const [steady, erratic] = computeRunComparison([
+    const [steady, erratic] = computeComparison([
       {
-        slot: 0,
-        label: "steady",
+        ...id(0, "steady"),
         stints: [stint(1, [lap(1, 100_000), lap(2, 100_000), lap(3, 100_000)])],
       },
       {
-        slot: 1,
-        label: "erratic",
+        ...id(1, "erratic"),
         stints: [stint(1, [lap(1, 95_000), lap(2, 100_000), lap(3, 105_000)])],
       },
     ]);
@@ -80,8 +84,8 @@ describe("computeRunComparison", () => {
   });
 
   it("returns nulls for a run with no timed laps rather than NaN", () => {
-    const [run] = computeRunComparison([
-      { slot: 0, label: "Run 1", stints: [stint(1, [lap(1, 0)])] },
+    const [run] = computeComparison([
+      { ...id(0, "Run 1"), stints: [stint(1, [lap(1, 0)])] },
     ]);
 
     expect(run.lapCount).toBe(0);
@@ -91,9 +95,9 @@ describe("computeRunComparison", () => {
   });
 
   it("treats a no-fuel stop as 0 but an absent column as unknown", () => {
-    const [withZero, withNothing] = computeRunComparison([
-      { slot: 0, label: "tyres only", stints: [stint(1, [lap(1, 100_000)], 0)] },
-      { slot: 1, label: "no g61 fuel data", stints: [stint(1, [lap(1, 100_000)], undefined)] },
+    const [withZero, withNothing] = computeComparison([
+      { ...id(0, "tyres only"), stints: [stint(1, [lap(1, 100_000)], 0)] },
+      { ...id(1, "no g61 fuel data"), stints: [stint(1, [lap(1, 100_000)], undefined)] },
     ]);
 
     expect(withZero.fuelAddedTotal).toBe(0);
@@ -101,10 +105,9 @@ describe("computeRunComparison", () => {
   });
 
   it("weights burn rate by lap, not by stint", () => {
-    const [run] = computeRunComparison([
+    const [run] = computeComparison([
       {
-        slot: 0,
-        label: "Run 1",
+        ...id(0, "Run 1"),
         stints: [
           stint(1, [lap(1, 100_000, 3), lap(2, 100_000, 3), lap(3, 100_000, 3)]),
           stint(2, [lap(4, 100_000, 5)]),
@@ -129,28 +132,45 @@ describe("computeRunComparison", () => {
       },
     });
 
-    const [run] = computeRunComparison([
-      { slot: 0, label: "Run 1", stints: [stint(1, [withWeather(1, 28), withWeather(2, 32)])] },
+    const [run] = computeComparison([
+      { ...id(0, "Run 1"), stints: [stint(1, [withWeather(1, 28), withWeather(2, 32)])] },
     ]);
 
     expect(run.conditions?.trackTempAvgC).toBe(30);
     expect(run.conditions?.trackUsageMaxPct).toBe(71);
   });
 
+  it("reports a single-stint unit's own pace trend, not a mean of several", () => {
+    // What stint mode relies on: a unit holding one stint makes the
+    // mean-of-per-stint-trends a mean over one value, so the column becomes
+    // that stint's own fit. A run-level unit averaging two opposite trends
+    // would report ~0 and hide both.
+    const improving = stint(1, [1, 2, 3, 4].map((n) => lap(n, 104_000 - n * 1000)));
+    const dropping = stint(2, [5, 6, 7, 8].map((n) => lap(n, 96_000 + n * 1000)));
+
+    const [asStint] = computeComparison([{ ...id(0, "Stint 1"), stints: [improving] }]);
+    const [asRun] = computeComparison([
+      { ...id(0, "Run 1"), stints: [improving, dropping] },
+    ]);
+
+    expect(asStint.paceTrendMsPerLap).toBeCloseTo(-1000, 5);
+    expect(asRun.paceTrendMsPerLap).toBeCloseTo(0, 5);
+  });
+
   it("reports null conditions for a run with no weather data, rather than zeroes", () => {
-    const [run] = computeRunComparison([
-      { slot: 0, label: "Run 1", stints: [stint(1, [lap(1, 100_000), lap(2, 100_000)])] },
+    const [run] = computeComparison([
+      { ...id(0, "Run 1"), stints: [stint(1, [lap(1, 100_000), lap(2, 100_000)])] },
     ]);
 
     expect(run.conditions).toBeNull();
   });
 });
 
-describe("computeRunLapDistributions", () => {
+describe("computeLapDistributions", () => {
   it("produces the five-number summary ECharts' boxplot expects", () => {
     const laps = [10, 12, 14, 16, 18].map((s, i) => lap(i + 1, s * 1000));
-    const [dist] = computeRunLapDistributions([
-      { slot: 0, label: "Run 1", stints: [stint(1, laps)] },
+    const [dist] = computeLapDistributions([
+      { ...id(0, "Run 1"), stints: [stint(1, laps)] },
     ]);
 
     expect(dist.box).not.toBeNull();
@@ -168,8 +188,8 @@ describe("computeRunLapDistributions", () => {
       ...[100, 100.5, 101, 101.5, 102, 102.5, 103, 103.5].map((s, i) => lap(i + 1, s * 1000)),
       lap(99, 180_000), // a lap ruined by traffic
     ];
-    const [dist] = computeRunLapDistributions([
-      { slot: 0, label: "Run 1", stints: [stint(1, laps)] },
+    const [dist] = computeLapDistributions([
+      { ...id(0, "Run 1"), stints: [stint(1, laps)] },
     ]);
 
     expect(dist.outliers.map((o) => o.lapNumber)).toEqual([99]);
@@ -178,8 +198,8 @@ describe("computeRunLapDistributions", () => {
   });
 
   it("returns a null box for a run with no timed laps", () => {
-    const [dist] = computeRunLapDistributions([
-      { slot: 0, label: "Run 1", stints: [stint(1, [lap(1, 0)])] },
+    const [dist] = computeLapDistributions([
+      { ...id(0, "Run 1"), stints: [stint(1, [lap(1, 0)])] },
     ]);
 
     expect(dist.box).toBeNull();

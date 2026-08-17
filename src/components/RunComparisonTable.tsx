@@ -1,16 +1,23 @@
 "use client";
 
-import { trackWetnessLabel, type RunComparison } from "@/core";
+import { trackWetnessLabel, type ComparisonRow } from "@/core";
 import { Delta, Swatch, Table, TableWrap, Td, Th, Tr } from "@/components/DataTable";
-import { runColor } from "@/components/charts/chart-theme";
+import { stintColor } from "@/components/charts/chart-theme";
 import { formatCelsius, formatLapTime, formatTrackUsage } from "@/lib/format";
 
 export interface RunComparisonTableProps {
-  runs: RunComparison[];
-  /** Slot to measure the others against, or null for absolute figures.
-   *  Controlled by the page so the choice survives a re-render. */
-  baselineSlot: number | null;
-  onBaselineChange: (slot: number | null) => void;
+  runs: ComparisonRow[];
+  /** Unit key to measure the others against, or null for absolute figures.
+   *  A key rather than a slot: in stint mode several rows share a run slot, so
+   *  a slot no longer identifies a row. Controlled by the page so the choice
+   *  survives a re-render. */
+  baselineKey: string | null;
+  onBaselineChange: (key: string | null) => void;
+  /** Heading for the identity column — "Run" or "Stint". */
+  unitLabel: string;
+  /** Heading for the detail column: the session on a run, the lap range on a
+   *  stint. */
+  detailLabel: string;
 }
 
 const DASH = "—";
@@ -101,19 +108,26 @@ function ValueCell({
   );
 }
 
-/** Every run's headline numbers in one place.
+/** Every compared unit's headline numbers in one place — one row per run, or
+ *  one per stint, depending on the page's mode.
  *
- *  Section 03 shows each run in its own panel, which is right for reading one
- *  run in detail but means comparing two of them is a matter of holding
- *  numbers in your head while scrolling. This is the same data pivoted: runs
- *  down the side, metrics across, so a difference is a glance rather than a
- *  memory exercise. */
+ *  The Stint explorer shows each run in its own panel, which is right for
+ *  reading one in detail but means comparing two is a matter of holding numbers
+ *  in your head while scrolling. This is the same data pivoted: units down the
+ *  side, metrics across, so a difference is a glance rather than a memory
+ *  exercise.
+ *
+ *  Two columns read differently in stint mode, and both get stronger for it:
+ *  Pace trend becomes the stint's own fit rather than a mean over the run's
+ *  stints, and the conditions columns describe that stint alone. */
 export function RunComparisonTable({
   runs,
-  baselineSlot,
+  baselineKey,
   onBaselineChange,
+  unitLabel,
+  detailLabel,
 }: RunComparisonTableProps) {
-  const baseline = runs.find((run) => run.slot === baselineSlot) ?? null;
+  const baseline = runs.find((run) => run.key === baselineKey) ?? null;
 
   return (
     <div>
@@ -124,7 +138,7 @@ export function RunComparisonTable({
         <button
           onClick={() => onBaselineChange(null)}
           className={`rounded-sm border px-2 py-0.5 font-mono text-[11px] transition-colors ${
-            baselineSlot === null
+            baselineKey === null
               ? "border-line2 bg-panel2 text-text"
               : "border-line text-muted hover:text-text"
           }`}
@@ -133,16 +147,16 @@ export function RunComparisonTable({
         </button>
         {runs.map((run) => (
           <button
-            key={run.slot}
-            onClick={() => onBaselineChange(run.slot)}
+            key={run.key}
+            onClick={() => onBaselineChange(run.key)}
             className={`rounded-sm border px-2 py-0.5 font-mono text-[11px] transition-colors ${
-              baselineSlot === run.slot
+              baselineKey === run.key
                 ? "border-line2 bg-panel2 text-text"
                 : "border-line text-muted hover:text-text"
             }`}
           >
-            <Swatch color={runColor(run.slot)} />
-            Run {run.slot + 1}
+            <Swatch color={stintColor(run.runSlot, run.stintIndex)} />
+            {run.name}
           </button>
         ))}
       </div>
@@ -151,11 +165,11 @@ export function RunComparisonTable({
         <Table>
           <thead>
             <tr>
-              <Th align="left">Run</Th>
+              <Th align="left">{unitLabel}</Th>
               {/* Was "Source" when this held a filename. It now holds
-                  date · driver · car, which describes the session rather than
-                  where the data came from. */}
-              <Th align="left">Session</Th>
+                  date · driver · car for a run, or the lap range for a stint —
+                  what the row IS, rather than where the data came from. */}
+              <Th align="left">{detailLabel}</Th>
               <Th>Stints</Th>
               <Th>Laps</Th>
               <Th>Best</Th>
@@ -179,18 +193,18 @@ export function RunComparisonTable({
           </thead>
           <tbody>
             {runs.map((run) => {
-              const isBaseline = baseline !== null && run.slot === baseline.slot;
+              const isBaseline = baseline !== null && run.key === baseline.key;
               const c = run.conditions;
               const baseC = baseline?.conditions ?? null;
 
               return (
-                <Tr key={run.slot} highlight={isBaseline}>
+                <Tr key={run.key} highlight={isBaseline}>
                   <Td align="left">
-                    <Swatch color={runColor(run.slot)} />
-                    <span className="text-text">Run {run.slot + 1}</span>
+                    <Swatch color={stintColor(run.runSlot, run.stintIndex)} />
+                    <span className="text-text">{run.name}</span>
                   </Td>
                   <Td align="left" className="max-w-[220px] truncate text-faint">
-                    {run.label}
+                    {run.detail}
                   </Td>
                   <Td>{run.stintCount}</Td>
                   <Td>{run.lapCount}</Td>
