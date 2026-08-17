@@ -301,3 +301,40 @@ describe("countLapSelection", () => {
     });
   });
 });
+
+describe("countLapSelection with an explicit context", () => {
+  /** Laps 1-2 only — the first stint of the same four-lap run. */
+  function firstStintOnly(): RunLapSelection {
+    return {
+      drivers: [{ laps: [makeLap({ lapNumber: 1 }), makeLap({ lapNumber: 2 })] }],
+      context: lapRuleContext(sampleRun()),
+    };
+  }
+
+  it("counts only the laps handed to it", () => {
+    expect(countLapSelection([firstStintOnly()], NO_FILTERS).total).toBe(2);
+  });
+
+  it("keeps dropFinalLap meaning the SESSION's last lap, not the subset's", () => {
+    // Lap 2 is the last lap of this subset but lap 4 is the run's last, so the
+    // rule drops nothing here. Deriving the context from the subset instead
+    // would report 1 and silently redefine the rule per selection.
+    expect(
+      countLapSelection([firstStintOnly()], NO_FILTERS).wouldDrop.dropFinalLap,
+    ).toBe(0);
+  });
+
+  it("still finds the run's last lap when the subset does contain it", () => {
+    const lastStint: RunLapSelection = {
+      drivers: [{ laps: [makeLap({ lapNumber: 3 }), makeLap({ lapNumber: 4 })] }],
+      context: lapRuleContext(sampleRun()),
+    };
+
+    expect(countLapSelection([lastStint], NO_FILTERS).wouldDrop.dropFinalLap).toBe(1);
+  });
+
+  it("falls back to deriving the context when none is given", () => {
+    const derived = { drivers: firstStintOnly().drivers };
+    expect(countLapSelection([derived], NO_FILTERS).wouldDrop.dropFinalLap).toBe(1);
+  });
+});

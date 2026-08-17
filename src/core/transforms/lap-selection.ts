@@ -78,6 +78,17 @@ export interface DriverLapSelection {
  *  driver's own last lap, which mid-session is just a driver change. */
 export interface RunLapSelection {
   drivers: DriverLapSelection[];
+  /** Rule context to use instead of deriving one from `drivers`.
+   *
+   *  Needed when `drivers` holds a SUBSET of the run — stint mode narrows the
+   *  count to the stints actually being compared. Deriving the context from
+   *  that subset would redefine `dropFinalLap` as "the last lap of these
+   *  stints", so a mid-session stint would report a final lap it doesn't have
+   *  and the rule's meaning would change with the selection. Passing the whole
+   *  run's context keeps the rule run-scoped while the COUNT stays scoped to
+   *  the subset: a stint that doesn't contain the run's last lap correctly
+   *  reports that `dropFinalLap` drops nothing from it. */
+  context?: LapRuleContext;
 }
 
 /** The run's highest lap number, or null when dropping it would leave nothing
@@ -183,7 +194,7 @@ export function countLapSelection(
   let byHand = 0;
 
   for (const run of runs) {
-    const context = lapRuleContext(run);
+    const context = run.context ?? lapRuleContext(run);
     for (const driver of run.drivers) {
       for (const lap of driver.laps) {
         if (lap.lapTimeMs <= 0) continue;

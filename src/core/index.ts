@@ -52,22 +52,27 @@ export { computeDriverPaceStats } from "./transforms/pace";
 export { computeFuelBurnRate, computeAverageFuelBurnRate } from "./transforms/fuel";
 
 export {
-  computeRunComparison,
-  computeRunLapDistributions,
-} from "./transforms/run-comparison";
+  buildComparisonUnits,
+  defaultStintSelection,
+  listStintCandidates,
+  stintKey,
+} from "./transforms/comparison-units";
 export type {
-  RunComparison,
-  RunComparisonInput,
-  RunLapDistribution,
-} from "./transforms/run-comparison";
-export { computeRunLapDeltas } from "./transforms/run-lap-delta";
+  ComparisonMode,
+  ComparisonSource,
+  ComparisonUnit,
+  StintCandidate,
+} from "./transforms/comparison-units";
+export { computeComparison, computeLapDistributions } from "./transforms/comparison";
+export type { ComparisonRow, UnitLapDistribution } from "./transforms/comparison";
+export { computeLapDeltas } from "./transforms/lap-delta";
 export type {
-  RunLapDeltaInput,
-  RunLapDeltaPoint,
-  RunLapDeltaSeries,
-  RunLapDeltaBaselinePoint,
-  RunLapDeltas,
-} from "./transforms/run-lap-delta";
+  DeltaAlign,
+  LapDeltaPoint,
+  LapDeltaSeries,
+  LapDeltaBaselinePoint,
+  LapDeltas,
+} from "./transforms/lap-delta";
 export { buildRaceSummary, listTeams } from "./transforms/race-summary";
 export type { TeamOption } from "./transforms/race-summary";
 export { computeRaceKpis } from "./transforms/race-kpis";
